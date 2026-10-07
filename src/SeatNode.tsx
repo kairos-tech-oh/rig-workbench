@@ -5,7 +5,7 @@ import { SeatTerminal } from "./SeatTerminal";
 export type SeatNodeData = {
   seat: Seat;
   terminalOpen: boolean;
-  onToggleTerminal: (nodeId: string) => void;
+  onToggleTerminal: (logicalId: string) => void;
 };
 
 export type SeatFlowNode = Node<SeatNodeData, "seat">;
@@ -22,12 +22,22 @@ function seatHealth(seat: Seat): Health {
   return "ready";
 }
 
-export function SeatNode({ data }: NodeProps<SeatFlowNode>) {
+export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
   const { seat, terminalOpen, onToggleTerminal } = data;
   const health = seatHealth(seat);
+  // working | idle | needs-input | unknown
+  const activity = seat.activityState?.display ?? "unknown";
+
+  const classes = [
+    "seat",
+    terminalOpen && "seat--open",
+    activity === "working" && "seat--working",
+    activity === "needs-input" && "seat--needs-input",
+    selected && "seat--selected",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`seat ${terminalOpen ? "seat--open" : ""}`}>
+    <div className={classes}>
       <Handle type="target" position={Position.Left} />
       <header className="seat__header">
         <span className={`seat__dot seat__dot--${health}`} title={health} />
@@ -35,7 +45,10 @@ export function SeatNode({ data }: NodeProps<SeatFlowNode>) {
         <span className="seat__model">{seat.model ?? seat.runtime}</span>
         <button
           className="seat__toggle nodrag"
-          onClick={() => onToggleTerminal(seat.nodeId)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleTerminal(seat.logicalId);
+          }}
           title={terminalOpen ? "Detach terminal" : "Attach terminal"}
         >
           {terminalOpen ? "Detach" : "Attach"}
@@ -43,9 +56,8 @@ export function SeatNode({ data }: NodeProps<SeatFlowNode>) {
       </header>
       <div className="seat__meta">
         <span>{seat.canonicalSessionName}</span>
-        <span>
-          {seat.activityState?.display ?? "unknown"}
-          {seat.activityState?.needsInput?.count ? " · needs input" : ""}
+        <span className={`seat__activity seat__activity--${activity}`}>
+          {activity}
           {seat.pendingWorkCount ? ` · ${seat.pendingWorkCount} queued` : ""}
         </span>
       </div>

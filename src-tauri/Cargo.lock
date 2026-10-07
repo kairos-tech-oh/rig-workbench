@@ -2857,6 +2857,7 @@ name = "rig-workbench"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "futures-util",
  "portable-pty",
  "reqwest",
  "serde",
@@ -2864,6 +2865,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]

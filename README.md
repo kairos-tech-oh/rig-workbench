@@ -23,39 +23,55 @@ The full background, and the rig this was built against, are in the
 `workbench/` folder of the `workbench` branch of
 [kairos-tech-oh/openrig](https://github.com/kairos-tech-oh/openrig).
 
-## Status: spike
-
-This is a first spike. It proves the two hard parts before the editor is built.
+## Status
 
 | Works | Not yet |
 |---|---|
-| Lists rigs from the daemon and shows one block per seat | Adding, editing or removing seats |
-| Pan, zoom, minimap, draggable blocks | Saving block positions |
-| Edges from the rig graph (`delegates_to` animated, `can_observe` dashed) | Drawing or editing edges |
-| Seat health dot, model, session, activity and queue count, refreshed every 5 s | Writing `rig.yaml` |
-| **Attach** opens a live terminal in the block; typing goes to the seat | Launching or stopping rigs from the GUI |
+| One block per seat: health, model, session, activity, queue count | Drawing or editing edges |
+| Pan, zoom, minimap, draggable blocks | Adding a new pod |
+| **Attach** opens a live terminal in the block; typing goes to the seat | Writing `rig.yaml` (the daemon is the source of truth) |
+| **Add seat** to an existing pod; **edit** a seat's model, working directory, role or runtime; **remove** a seat | Launching or stopping whole rigs |
+| Layout saved per rig: positions, zoom/pan, open terminals | |
+| Working seats get a pulsing green outline; seats that need input, amber | |
+| An edge flashes green when its seats talk; a temporary edge appears if they have none | |
 
-## How it works
+### Editing seats
 
-```
-GUI (Windows or Linux)
-  ├─ daemon_get ──HTTP──▶ OpenRig daemon, 127.0.0.1:7433
-  │                       /api/rigs, /api/rigs/:id/nodes, /api/rigs/:id/graph
-  └─ pty_open ───PTY───▶ tmux attach-session -t =<seat session>
-                         (inside WSL via `wsl.exe -e` on Windows)
-```
+Click a block to open its inspector; **+ Add seat** opens the same form empty.
 
-- **`src-tauri/src/daemon.rs`:** read-only GET proxy to the daemon API. Only
-  `/api/...` paths are allowed. Calls go through Rust so the daemon doesn't
-  need to allow the webview's origin.
-- **`src-tauri/src/pty.rs`:** one pseudo-terminal per attached block, running
-  `tmux attach-session`. Output streams to the block over a Tauri channel
-  (base64, so multi-byte characters split across reads survive). Detaching
-  kills only the tmux client; the seat keeps running.
-- **`src/App.tsx`:** the canvas. Seats are laid out one column per pod and
-  keep wherever you drag them.
-- **`src/SeatNode.tsx`, `src/SeatTerminal.tsx`:** the seat block and its
-  xterm.js terminal.
+- **Model:** recorded with the daemon's `set-model` and used from the seat's
+  next launch. Tick **Restart now** to relaunch it fresh straight away.
+- **Working directory, role or runtime:** the daemon can't change these on a
+  live seat, so the seat is **replaced**: removed and added back under the same
+  name with a fresh conversation. The panel asks for confirmation.
+- **Remove:** stops the seat and removes it from the rig (confirmation
+  required). The daemon refuses if the seat still owns active queue items.
+- **Rig folder:** roles are `local:` agent refs resolved against the folder
+  holding the rig spec. The daemon doesn't record that folder, so the GUI
+  guesses it (the working directory most seats share) and saves any change
+  with the layout.
+
+New seats get no cross-pod edges: the daemon's add-member route only accepts
+edges inside a pod. Seats can still message any other seat.
+
+### Saved layouts
+
+One JSON file per rig name in the app data folder:
+`%APPDATA%\dev.kairos.rigworkbench\layouts\<rig>.json` on Windows,
+`~/.local/share/dev.kairos.rigworkbench/layouts/<rig>.json` on Linux. It lives
+outside the app's install folder, so it survives restarts and updates. Seats are
+keyed by logical id (`pod.member`), so a replaced or re-created seat keeps its
+place.
+
+### Communication flashes
+
+- **`rig send` between seats:** each seat's outbox
+  (`/api/queue/outbox/list`) is polled every 2 s. The daemon records sends made
+  from a seat but emits no event for them. Sends with no known sender (for
+  example from a plain shell) aren't recorded and don't flash.
+- **Queue items** created or handed off between seats arrive on the daemon's
+  event stream (`/api/events`), which also triggers immediate refreshes when a
+  seat changes or its activity changes.
 
 ## Running it
 
@@ -93,15 +109,13 @@ no WSL.
 - **Open terminals overlap neighbours.** Seats are laid out for collapsed
   blocks. An attached block grows and is drawn on top of the blocks below it;
   drag blocks apart as needed.
-- **Polling.** Status is polled every 5 s. The daemon has `/api/events` and
-  `/api/activity` streams that could replace polling.
+- **Polling.** Seats are also polled every 5 s as a fallback to the event
+  stream.
 
 ## Next steps
 
-1. Persist block positions per rig.
-2. A seat inspector panel: edit runtime, model, cwd and role, backed by the rig
-   spec.
-3. A palette of seat types to drag onto the canvas; drawing edges between
-   blocks.
-4. Write the spec and apply it (`rig up`), with a plan preview first.
-5. Switch from polling to the daemon's event stream.
+1. Drag seat types from a palette onto the canvas; draw edges between blocks.
+2. Add pods (the daemon's `expand` route).
+3. Export the live rig to `rig.yaml` (`rig export`) so the spec stays in step
+   with GUI edits.
+4. Replace seat polling entirely with the event stream.

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 export interface Rig {
   id: string;
@@ -22,6 +22,9 @@ export interface Seat {
   runtime: string;
   model: string | null;
   cwd: string | null;
+  agentRef: string | null;
+  profile: string | null;
+  resolvedSpecName: string | null;
   sessionStatus: string | null;
   startupStatus: string | null;
   lifecycleState: string | null;
@@ -34,6 +37,12 @@ export interface RigEdge {
   source: string;
   target: string;
   label: string;
+}
+
+/** The pod a seat belongs to, and its member id within the pod. */
+export function splitLogicalId(logicalId: string): { pod: string; member: string } {
+  const dot = logicalId.indexOf(".");
+  return { pod: logicalId.slice(0, dot), member: logicalId.slice(dot + 1) };
 }
 
 export function daemonGet<T>(path: string): Promise<T> {
@@ -50,4 +59,141 @@ export async function listEdges(rigId: string): Promise<RigEdge[]> {
     `/api/rigs/${encodeURIComponent(rigId)}/graph`,
   );
   return graph.edges;
+}
+
+export interface OutboxEntry {
+  outboxId: string;
+  senderSession: string;
+  destinationSession: string;
+  tsDispatched: string;
+}
+
+export const listOutbox = (senderSession: string) =>
+  daemonGet<OutboxEntry[]>(
+    `/api/queue/outbox/list?senderSession=${encodeURIComponent(senderSession)}&limit=10`,
+  );
+
+// ---- Writes ---------------------------------------------------------------
+
+interface WriteResult {
+  ok: boolean;
+  status: number;
+  body: unknown;
+}
+
+const REASON = "Changed in Rig Workbench";
+
+/** The daemon's own explanation for a refused write. */
+function describeFailure(result: WriteResult): string {
+  const body = result.body as Record<string, unknown> | string | null;
+  if (typeof body === "string") return body || `HTTP ${result.status}`;
+  if (body && typeof body === "object") {
+    for (const key of ["message", "error", "guidance"]) {
+      if (typeof body[key] === "string") return body[key] as string;
+    }
+    if (Array.isArray(body.errors)) return body.errors.join("; ");
+    return JSON.stringify(body);
+  }
+  return `HTTP ${result.status}`;
+}
+
+async function daemonWrite(method: "POST" | "DELETE", path: string, body?: unknown): Promise<unknown> {
+  const result = await invoke<WriteResult>("daemon_write", { method, path, body: body ?? null });
+  if (!result.ok) throw new Error(describeFailure(result));
+  return result.body;
+}
+
+export interface MemberConfig {
+  id: string;
+  runtime: string;
+  agentRef: string;
+  profile: string;
+  cwd: string;
+  model: string;
+}
+
+/** Add a seat to an existing pod and launch it. `rigRoot` resolves `local:` agent refs. */
+export function addSeat(rigId: string, pod: string, member: MemberConfig, rigRoot: string) {
+  return daemonWrite(
+    "POST",
+    `/api/rigs/${encodeURIComponent(rigId)}/pods/${encodeURIComponent(pod)}/members`,
+    {
+      member: {
+        id: member.id,
+        runtime: member.runtime,
+        agent_ref: member.agentRef,
+        profile: member.profile,
+        cwd: member.cwd,
+        ...(member.model ? { model: member.model } : {}),
+      },
+      rigRoot,
+    },
+  );
+}
+
+/** Stop a seat and remove it from the rig. */
+export function removeSeat(rigId: string, logicalId: string) {
+  return daemonWrite(
+    "DELETE",
+    `/api/rigs/${encodeURIComponent(rigId)}/nodes/${encodeURIComponent(logicalId)}`,
+  );
+}
+
+/** Record a new model. It takes effect the next time the seat launches. */
+export function setSeatModel(session: string, model: string) {
+  return daemonWrite("POST", `/api/seat/set-model/${encodeURIComponent(session)}`, {
+    model,
+    reason: REASON,
+  });
+}
+
+/** Stop the seat and launch it again with a fresh conversation. */
+export function relaunchSeatFresh(session: string) {
+  return daemonWrite("POST", `/api/seat/launch/${encodeURIComponent(session)}`, {
+    fresh: true,
+    stop: true,
+    reason: REASON,
+  });
+}
+
+// ---- Event stream -----------------------------------------------------------
+
+export interface DaemonEvent {
+  type: string;
+  seq: number;
+  /** UTC, formatted `YYYY-MM-DD HH:MM:SS`. */
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+type Listener = (event: DaemonEvent) => void;
+const listeners = new Set<Listener>();
+let subscribed = false;
+
+/** Listen to the daemon's event feed. The first listener opens the stream. */
+export function onDaemonEvent(listener: Listener): () => void {
+  listeners.add(listener);
+  if (!subscribed) {
+    subscribed = true;
+    const channel = new Channel<string>();
+    channel.onmessage = (raw) => {
+      let event: DaemonEvent;
+      try {
+        event = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      for (const l of listeners) l(event);
+    };
+    invoke("events_subscribe", { onEvent: channel }).catch((error) => {
+      subscribed = false;
+      console.warn("event stream unavailable:", error);
+    });
+  }
+  return () => listeners.delete(listener);
+}
+
+/** Milliseconds since the event happened. Replayed history is old. */
+export function eventAge(event: DaemonEvent): number {
+  return Date.now() - Date.parse(event.createdAt.replace(" ", "T") + "Z");
 }

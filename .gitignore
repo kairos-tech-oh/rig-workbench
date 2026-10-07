@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Written by OpenRig into a seat's working directory
+CLAUDE.local.md
+.mcp.json
+.claude/
+.openrig/
