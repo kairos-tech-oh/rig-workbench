@@ -28,3 +28,6 @@ CLAUDE.local.md
 .mcp.json
 .claude/
 .openrig/
+
+# Written by tools/release/ci-config.mjs for a release build
+ci.conf.json

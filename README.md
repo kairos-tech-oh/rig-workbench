@@ -135,6 +135,23 @@ Environment variables:
 On Linux (for example the Arch laptop) the terminals run `tmux` directly, with
 no WSL.
 
+## Installing and updating
+
+Pushing a tag `vX.Y.Z` builds the installers in GitHub Actions and attaches
+them to a draft GitHub release, with a signed `latest.json` for the updater:
+
+- **Windows:** `Rig Workbench_X.Y.Z_x64-setup.exe` (per-user, no admin) or the
+  `.msi`.
+- **Linux:** `.AppImage` (the one that updates itself), `.deb` or `.rpm`.
+
+An installed copy checks for a newer release on launch and offers to install
+it under the toolbar; clicking the version number in the toolbar checks on
+demand. Installing restarts the app; the seats keep running in tmux, and open
+terminals reattach from the saved layout.
+
+How to cut a release, and the signing key behind updates, are in
+[docs/RELEASING.md](docs/RELEASING.md).
+
 ## Known limitations
 
 - **Terminal size takes over the seat's window.** tmux resizes a session's

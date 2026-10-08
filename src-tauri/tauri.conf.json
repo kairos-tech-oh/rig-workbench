@@ -25,13 +25,47 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "publisher": "Kairos Technologies",
+    "shortDescription": "A desktop canvas for OpenRig rigs",
+    "targets": [
+      "nsis",
+      "msi",
+      "appimage",
+      "deb",
+      "rpm"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "tmux"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFMERBNDY4RDEwNTQ5QUYKUldTdlNRWFJhS1FOSHRnYldSUFZVQXdFQi9oYmdxa0dwbkRxcDRPMGlYWkw2bjA1TkY0eFJSYU0K",
+      "endpoints": [
+        "https://github.com/kairos-tech-oh/rig-workbench/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

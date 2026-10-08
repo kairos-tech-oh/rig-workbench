@@ -33,6 +33,7 @@ import { SeatNode, type SeatFlowNode } from "./SeatNode";
 import { onSpecProblem } from "./rigSpec";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
 import { holdFocusOnCanvas, restoreTerminalFocus } from "./terminalFocus";
+import { UpdateBanner, useUpdates, VersionButton } from "./updates";
 import { useCommunicationFlashes, type Flash } from "./useCommunicationFlashes";
 
 const POLL_MS = 5000;
@@ -168,6 +169,7 @@ export default function App() {
 
   const rigName = rigs.find((rig) => rig.id === rigId)?.name ?? null;
   const flashes = useCommunicationFlashes(seats);
+  const updates = useUpdates();
 
   // ---- Layout persistence ----------------------------------------------------
 
@@ -490,7 +492,9 @@ export default function App() {
         </span>
         {status && <span className="toolbar__status">{status}</span>}
         {error && <span className="toolbar__error">{error}</span>}
+        <VersionButton updates={updates} />
       </header>
+      <UpdateBanner updates={updates} />
       <div className="canvas">
         <ReactFlow
           nodes={renderedNodes}

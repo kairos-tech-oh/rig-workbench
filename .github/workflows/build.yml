@@ -1,0 +1,174 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fast feedback on every push: the front end type-checks and builds, and the
+  # Rust side is formatted, lint-clean and tested.
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # Pull requests read the cache main saved but do not add their own.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Needed to compile the Tauri crate.
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+      # tsc + vite. The Rust build embeds dist/, so this comes first.
+      - run: npm run build
+      - run: cargo fmt --check
+        working-directory: src-tauri
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test
+        working-directory: src-tauri
+
+  # Installers are built for a release tag, or on demand from the Actions
+  # tab, not on every push.
+  bundle:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Signing material is only offered to builds of this repository's own
+    # branches and tags; a pull request from a fork gets none and builds
+    # unsigned, which ci-config.mjs allows for.
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      # Off until a certificate exists: set the repository variable
+      # WINDOWS_SIGNING to "trusted-signing". See docs/RELEASING.md.
+      WINDOWS_SIGNING: ${{ vars.WINDOWS_SIGNING }}
+      AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          # One release cache per platform, refreshed by each tag.
+          shared-key: release
+          save-if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      # Tauri's Linux deps. Windows needs none: WebView2 ships with the OS and
+      # the NSIS installer pulls the bootstrapper if it is ever missing.
+      - name: Linux build dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf libgtk-3-dev build-essential curl wget file
+
+      - run: npm ci
+
+      - name: Windows signing tool
+        if: matrix.os == 'windows-latest' && env.WINDOWS_SIGNING == 'trusted-signing'
+        run: cargo install trusted-signing-cli --locked
+
+      - name: Release configuration
+        run: node tools/release/ci-config.mjs ci.conf.json
+
+      - name: Bundle installers (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run tauri -- build --bundles nsis,msi --config ci.conf.json
+
+      - name: Bundle installers (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: npm run tauri -- build --bundles deb,rpm --config ci.conf.json
+
+      # AppImage shells out to linuxdeploy, which needs FUSE and network at
+      # bundle time. It is the Linux artifact the updater serves, so it is
+      # worth having, but it must not fail the build that produced a working
+      # .deb. See docs/RELEASING.md for why libwayland is left out.
+      - name: AppImage GTK plugin without libwayland
+        if: matrix.os == 'ubuntu-22.04'
+        run: tools/release/appimage-gtk-plugin.sh
+
+      - name: Bundle AppImage (best effort)
+        if: matrix.os == 'ubuntu-22.04'
+        continue-on-error: true
+        run: npm run tauri -- build --bundles appimage --config ci.conf.json
+
+      - name: AppImage bundles no libwayland
+        if: matrix.os == 'ubuntu-22.04' && hashFiles('src-tauri/target/release/bundle/appimage/*.AppImage') != ''
+        run: tools/release/appimage-check.sh src-tauri/target/release/bundle/appimage/*.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rig-workbench-${{ matrix.name }}
+          # Only long enough for the release job to attach them, or for a manual
+          # run's installers to be downloaded.
+          retention-days: 2
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/msi/*.msi.sig
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+
+  # A tagged push publishes the installers so a machine can just download one.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      # What installed copies read to find this release. Fails the release when
+      # the installers were not signed with the update key.
+      - name: Update manifest
+        run: node tools/release/latest-json.mjs artifacts "${{ github.ref_name }}" "${{ github.repository }}" artifacts/latest.json
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/**/*
