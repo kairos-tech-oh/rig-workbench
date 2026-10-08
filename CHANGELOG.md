@@ -5,6 +5,9 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Fix connections missing and seat blocks vanishing a few seconds after
+  opening a rig in the Linux AppImage.
+
 ## [0.1.0] - 2026-10-08
 
 First release.
