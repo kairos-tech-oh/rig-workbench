@@ -1,4 +1,5 @@
 mod daemon;
+mod daemon_update;
 mod layout;
 mod pty;
 mod rig_spec;
@@ -19,10 +20,13 @@ pub fn run() {
         .manage(updates::Pending::default())
         .manage(pty::PtyRegistry::default())
         .manage(daemon::EventsSubscription::default())
+        .manage(daemon_update::PendingDaemon::default())
         .invoke_handler(tauri::generate_handler![
             daemon::daemon_get,
             daemon::daemon_write,
             daemon::events_subscribe,
+            daemon_update::daemon_update_check,
+            daemon_update::daemon_update_install,
             layout::layout_load,
             layout::layout_save,
             pty::pty_open,

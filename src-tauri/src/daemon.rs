@@ -17,13 +17,13 @@ const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(240);
 const EVENTS_RETRY_DELAY: Duration = Duration::from_secs(3);
 
-fn daemon_url() -> String {
+pub(crate) fn daemon_url() -> String {
     std::env::var("RIG_DAEMON_URL").unwrap_or_else(|_| DEFAULT_DAEMON_URL.to_string())
 }
 
 /// One shared client with no overall timeout (the event stream stays open);
 /// each request sets its own.
-fn client() -> &'static reqwest::Client {
+pub(crate) fn client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| reqwest::Client::builder().build().expect("failed to build HTTP client"))
 }

@@ -5,6 +5,9 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Settings has an Updates section showing the app and OpenRig daemon versions,
+  with one button that updates the daemon (Linux) and then the app. The daemon
+  is only replaced by a newer signed fork release, never a source build.
 - A Settings window (toolbar button or Ctrl+,) with a background opacity
   slider: the canvas backdrop can fade to show the desktop behind it, while
   seats and connections stay solid. The setting is remembered.

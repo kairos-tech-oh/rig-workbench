@@ -84,13 +84,24 @@ corner. They appear when you hover a tile.
   points use the sides of the two tiles that face each other.
 
 **Requires a daemon with the edge routes** (`POST /api/rigs/:rigId/edges`,
-`DELETE /api/rigs/:rigId/edges/:edgeId`). Released OpenRig (0.6.6) can only
+`DELETE /api/rigs/:rigId/edges/:edgeId`). Upstream OpenRig on npm can only
 create cross-pod edges when a rig is first launched from its spec. The routes
-are on the `feat/live-edges` branch of
-[kairos-tech-oh/openrig](https://github.com/kairos-tech-oh/openrig); build and
-install it with `scripts/build-package.sh`, then `npm pack` in `packages/cli`
-and `npm install -g` the tarball. On an older daemon, drawing a line reports
-the daemon's 404.
+are in the fork [kairos-tech-oh/openrig](https://github.com/kairos-tech-oh/openrig),
+whose releases are versioned `X.Y.Z-kairos.N`. Each Rig Workbench release
+carries the fork's CLI tarball (`openrig-cli-<version>.tgz`), signed with the
+app's update key. On an older daemon, drawing a line reports the daemon's 404.
+
+To switch to the release build the first time (the app never replaces a daemon
+you built from source), download the tarball from the latest Rig Workbench
+release, then:
+
+```bash
+rig daemon stop
+npm install -g ./openrig-cli-<version>.tgz   # with the npm of the node that runs rig
+rig daemon start --no-kernel                 # drop --no-kernel if you use the kernel
+```
+
+After that, **Settings → Updates** keeps the daemon current along with the app.
 
 ### Saved layouts
 
@@ -137,8 +148,11 @@ no WSL.
 
 ## Installing and updating
 
-Pushing a tag `vX.Y.Z` builds the installers in GitHub Actions and attaches
-them to a draft GitHub release, with a signed `latest.json` for the updater:
+Releases are on
+[GitHub](https://github.com/kairos-tech-oh/rig-workbench/releases), built
+either by GitHub Actions from a pushed tag or on the maintainer's machine with
+`tools/release/publish-local.sh`. Each has a signed `latest.json` for the
+updater:
 
 - **Windows:** `Rig Workbench_X.Y.Z_x64-setup.exe` (per-user, no admin) or the
   `.msi`.
@@ -148,6 +162,19 @@ An installed copy checks for a newer release on launch and offers to install
 it under the toolbar; clicking the version number in the toolbar checks on
 demand. Installing restarts the app; the seats keep running in tmux, and open
 terminals reattach from the saved layout.
+
+**Settings → Updates** (toolbar **Settings**, or Ctrl+,) shows the app and
+daemon versions and has one **Update** button. It first updates the OpenRig
+daemon when the release carries a newer fork build: it checks the tarball's
+signature, stops the daemon, installs the tarball with the same npm and prefix
+the daemon runs from, and starts it again with the environment it had. Seats
+keep running in tmux and the queue is kept on disk. Then it installs the new app
+and restarts it. The daemon part works on Linux; on Windows, update the daemon
+inside WSL by hand.
+
+It leaves the daemon alone when it is up to date, newer than the release, built
+from a dirty tree, built from source at the released version, or not a fork
+release (no `-kairos` suffix); Settings says which.
 
 How to cut a release, and the signing key behind updates, are in
 [docs/RELEASING.md](docs/RELEASING.md).

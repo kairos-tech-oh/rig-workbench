@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { UpdatesSection } from "./updates";
 
 export interface Settings {
   backgroundOpacity: number; // 0–100, the canvas backdrop only
@@ -62,6 +63,7 @@ export function SettingsWindow() {
       </label>
       <p className="settings__hint">Only the canvas backdrop fades; seats and connections stay solid.</p>
       {error && <p className="settings__error">{error}</p>}
+      <UpdatesSection />
     </main>
   );
 }
