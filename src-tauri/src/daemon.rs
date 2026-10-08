@@ -57,24 +57,28 @@ pub async fn daemon_get(path: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("daemon returned invalid JSON for {path}: {e}"))
 }
 
-/// The only writes the GUI makes, as (method, path prefix).
+/// The only writes the GUI makes. `*` matches one path segment.
 const WRITE_ALLOWLIST: &[(&str, &str)] = &[
-    // Add a member to a pod: /api/rigs/:rigId/pods/:pod/members
-    ("POST", "/api/rigs/"),
-    // Remove a seat: /api/rigs/:rigId/nodes/:logicalId
-    ("DELETE", "/api/rigs/"),
-    ("POST", "/api/seat/set-model/"),
-    ("POST", "/api/seat/launch/"),
+    ("POST", "/api/rigs/*/pods/*/members"), // add a seat to a pod
+    ("DELETE", "/api/rigs/*/nodes/*"),      // remove a seat
+    ("POST", "/api/rigs/*/edges"),          // connect two seats
+    ("DELETE", "/api/rigs/*/edges/*"),      // disconnect two seats
+    ("POST", "/api/seat/set-model/*"),
+    ("POST", "/api/seat/launch/*"),
 ];
+
+fn matches_pattern(pattern: &str, path: &str) -> bool {
+    let pattern: Vec<&str> = pattern.split('/').collect();
+    let path: Vec<&str> = path.split('/').collect();
+    pattern.len() == path.len()
+        && pattern.iter().zip(&path).all(|(p, s)| if *p == "*" { !s.is_empty() } else { p == s })
+}
 
 fn check_write(method: &str, path: &str) -> Result<reqwest::Method, String> {
     check_api_path(path)?;
-    let allowed = WRITE_ALLOWLIST.iter().any(|(m, prefix)| *m == method && path.starts_with(prefix))
-        && match method {
-            "POST" if path.starts_with("/api/rigs/") => path.contains("/pods/") && path.ends_with("/members"),
-            "DELETE" => path.contains("/nodes/"),
-            _ => true,
-        };
+    let allowed = WRITE_ALLOWLIST
+        .iter()
+        .any(|(m, pattern)| *m == method && matches_pattern(pattern, path));
     if !allowed {
         return Err(format!("refusing {method} {path}: not an operation Rig Workbench performs"));
     }
@@ -168,4 +172,24 @@ async fn stream_events(on_event: &Channel<String>, last_id: &mut u64) -> Result<
         }
     }
     Err("event stream closed".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_write;
+
+    #[test]
+    fn allows_only_the_gui_writes() {
+        assert!(check_write("POST", "/api/rigs/R1/pods/eng/members").is_ok());
+        assert!(check_write("DELETE", "/api/rigs/R1/nodes/eng.gym").is_ok());
+        assert!(check_write("POST", "/api/rigs/R1/edges").is_ok());
+        assert!(check_write("DELETE", "/api/rigs/R1/edges/E1").is_ok());
+        assert!(check_write("POST", "/api/seat/set-model/eng-gym%40workbench").is_ok());
+
+        assert!(check_write("DELETE", "/api/rigs/R1").is_err());
+        assert!(check_write("POST", "/api/rigs/R1/up").is_err());
+        assert!(check_write("DELETE", "/api/rigs/R1/edges").is_err());
+        assert!(check_write("POST", "/api/rigs//edges").is_err());
+        assert!(check_write("POST", "/api/transport/send").is_err());
+    }
 }

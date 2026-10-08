@@ -27,13 +27,14 @@ The full background, and the rig this was built against, are in the
 
 | Works | Not yet |
 |---|---|
-| One block per seat: health, model, session, activity, queue count | Drawing or editing edges |
-| Pan, zoom, minimap, draggable blocks | Adding a new pod |
+| One block per seat: health, model, session, activity, queue count | Adding a new pod |
+| Pan, zoom, minimap, draggable blocks | Launching or stopping whole rigs |
 | **Attach** opens a live terminal in the block; typing goes to the seat | Writing `rig.yaml` (the daemon is the source of truth) |
-| **Add seat** to an existing pod; **edit** a seat's model, working directory, role or runtime; **remove** a seat | Launching or stopping whole rigs |
+| **Add seat** to an existing pod; **edit** a seat's model, working directory, role or runtime; **remove** a seat | |
 | Layout saved per rig: positions, zoom/pan, open terminals | |
 | Working seats get a pulsing green outline; seats that need input, amber | |
 | An edge flashes green when its seats talk; a temporary edge appears if they have none | |
+| **Draw, move and remove connections** between any sides or corners of two tiles | |
 
 ### Editing seats
 
@@ -51,8 +52,32 @@ Click a block to open its inspector; **+ Add seat** opens the same form empty.
   guesses it (the working directory most seats share) and saves any change
   with the layout.
 
-New seats get no cross-pod edges: the daemon's add-member route only accepts
-edges inside a pod. Seats can still message any other seat.
+The model dropdown lists the models in `src/models.json` for the seat's
+runtime; **Custom…** takes any other model id.
+
+### Connections
+
+Every tile has eight attachment points: the middle of each side and each
+corner. They appear when you hover a tile.
+
+- **Draw:** drag from any point to a point on another tile, then choose the
+  kind (`delegates_to`, `can_observe`, `collaborates_with`, `escalates_to`,
+  `spawned_by`). The direction runs from the tile you started on.
+- **Move an end:** drag either end of a line to another point on the same tile
+  to re-anchor it, or onto another tile to reconnect it (the edge is replaced
+  with the same kind).
+- **Remove:** click a line, then **Remove connection** (confirmation required).
+- Chosen attachment points are saved with the layout. Lines without saved
+  points use the sides of the two tiles that face each other.
+
+**Requires a daemon with the edge routes** (`POST /api/rigs/:rigId/edges`,
+`DELETE /api/rigs/:rigId/edges/:edgeId`). Released OpenRig (0.6.6) can only
+create cross-pod edges when a rig is first launched from its spec. The routes
+are on the `feat/live-edges` branch of
+[kairos-tech-oh/openrig](https://github.com/kairos-tech-oh/openrig); build and
+install it with `scripts/build-package.sh`, then `npm pack` in `packages/cli`
+and `npm install -g` the tarball. On an older daemon, drawing a line reports
+the daemon's 404.
 
 ### Saved layouts
 

@@ -10,6 +10,22 @@ export type SeatNodeData = {
 
 export type SeatFlowNode = Node<SeatNodeData, "seat">;
 
+/**
+ * Attachment points on every side and corner. All are `source` handles: the
+ * canvas uses loose connection mode, so any point can connect to any other,
+ * and the edge's direction comes from where the drag started.
+ */
+export const HANDLES: { id: string; position: Position; style?: React.CSSProperties }[] = [
+  { id: "t", position: Position.Top },
+  { id: "r", position: Position.Right },
+  { id: "b", position: Position.Bottom },
+  { id: "l", position: Position.Left },
+  { id: "tl", position: Position.Top, style: { left: 0 } },
+  { id: "tr", position: Position.Top, style: { left: "100%" } },
+  { id: "br", position: Position.Bottom, style: { left: "100%" } },
+  { id: "bl", position: Position.Bottom, style: { left: 0 } },
+];
+
 type Health = "ready" | "attention" | "down";
 
 // lifecycleState can stay `attention_required` after a seat recovers (for
@@ -38,32 +54,36 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
 
   return (
     <div className={classes}>
-      <Handle type="target" position={Position.Left} />
-      <header className="seat__header">
-        <span className={`seat__dot seat__dot--${health}`} title={health} />
-        <span className="seat__name">{seat.logicalId}</span>
-        <span className="seat__model">{seat.model ?? seat.runtime}</span>
-        <button
-          className="seat__toggle nodrag"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleTerminal(seat.logicalId);
-          }}
-          title={terminalOpen ? "Detach terminal" : "Attach terminal"}
-        >
-          {terminalOpen ? "Detach" : "Attach"}
-        </button>
-      </header>
-      <div className="seat__meta">
-        <span>{seat.canonicalSessionName}</span>
-        <span className={`seat__activity seat__activity--${activity}`}>
-          {activity}
-          {seat.pendingWorkCount ? ` · ${seat.pendingWorkCount} queued` : ""}
-        </span>
+      {HANDLES.map((h) => (
+        <Handle key={h.id} id={h.id} type="source" position={h.position} style={h.style} className="seat__handle" />
+      ))}
+      {/* Clips the content to the rounded corners; the handles sit outside it. */}
+      <div className="seat__clip">
+        <header className="seat__header">
+          <span className={`seat__dot seat__dot--${health}`} title={health} />
+          <span className="seat__name">{seat.logicalId}</span>
+          <span className="seat__model">{seat.model ?? seat.runtime}</span>
+          <button
+            className="seat__toggle nodrag"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleTerminal(seat.logicalId);
+            }}
+            title={terminalOpen ? "Detach terminal" : "Attach terminal"}
+          >
+            {terminalOpen ? "Detach" : "Attach"}
+          </button>
+        </header>
+        <div className="seat__meta">
+          <span>{seat.canonicalSessionName}</span>
+          <span className={`seat__activity seat__activity--${activity}`}>
+            {activity}
+            {seat.pendingWorkCount ? ` · ${seat.pendingWorkCount} queued` : ""}
+          </span>
+        </div>
+        {seat.cwd && <div className="seat__cwd">{seat.cwd}</div>}
+        {terminalOpen && <SeatTerminal session={seat.canonicalSessionName} />}
       </div>
-      {seat.cwd && <div className="seat__cwd">{seat.cwd}</div>}
-      {terminalOpen && <SeatTerminal session={seat.canonicalSessionName} />}
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

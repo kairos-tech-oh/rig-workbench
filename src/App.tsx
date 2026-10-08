@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Controls,
   MarkerType,
   MiniMap,
@@ -9,13 +10,25 @@ import {
   useNodesInitialized,
   useNodesState,
   useReactFlow,
+  type Connection,
   type Edge,
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./App.css";
-import { listEdges, listRigs, listSeats, onDaemonEvent, type Rig, type RigEdge, type Seat } from "./api";
-import { emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
+import {
+  addEdge,
+  listEdges,
+  listRigs,
+  listSeats,
+  onDaemonEvent,
+  removeEdge,
+  type Rig,
+  type RigEdge,
+  type Seat,
+} from "./api";
+import { ConnectPanel, EdgePanel } from "./EdgePanels";
+import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { SeatNode, type SeatFlowNode } from "./SeatNode";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
 import { useCommunicationFlashes, type Flash } from "./useCommunicationFlashes";
@@ -54,8 +67,23 @@ function guessRigFolder(seats: Seat[]): string {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
 }
 
+type Handles = { sourceHandle: string; targetHandle: string };
+type HandlesFor = (source: string, target: string, kind: string) => Handles;
+type Box = { x: number; y: number; w: number; h: number };
+
+/** The sides of two tiles that face each other, for an edge with no saved attachment points. */
+function facingHandles(a: Box | undefined, b: Box | undefined): Handles {
+  if (!a || !b) return { sourceHandle: "r", targetHandle: "l" };
+  const dx = b.x + b.w / 2 - (a.x + a.w / 2);
+  const dy = b.y + b.h / 2 - (a.y + a.h / 2);
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? { sourceHandle: "r", targetHandle: "l" } : { sourceHandle: "l", targetHandle: "r" };
+  }
+  return dy >= 0 ? { sourceHandle: "b", targetHandle: "t" } : { sourceHandle: "t", targetHandle: "b" };
+}
+
 /** Daemon edges use node ids; the canvas uses logical ids, which survive a seat being replaced. */
-function toFlowEdge(edge: RigEdge, nodeToLogical: Map<string, string>): Edge | null {
+function toFlowEdge(edge: RigEdge, nodeToLogical: Map<string, string>, handlesFor: HandlesFor): Edge | null {
   const source = nodeToLogical.get(edge.source);
   const target = nodeToLogical.get(edge.target);
   if (!source || !target) return null;
@@ -64,6 +92,8 @@ function toFlowEdge(edge: RigEdge, nodeToLogical: Map<string, string>): Edge | n
     id: edge.id,
     source,
     target,
+    ...handlesFor(source, target, edge.label),
+    data: { kind: edge.label },
     label: edge.label,
     style: observe ? { strokeDasharray: "6 4" } : { strokeWidth: 1.5 },
     markerEnd: { type: MarkerType.ArrowClosed },
@@ -72,7 +102,7 @@ function toFlowEdge(edge: RigEdge, nodeToLogical: Map<string, string>): Edge | n
 }
 
 /** Highlight edges between seats that just talked; draw a temporary one where none exists. */
-function withFlashes(edges: Edge[], flashes: Flash[]): Edge[] {
+function withFlashes(edges: Edge[], flashes: Flash[], handlesFor: HandlesFor): Edge[] {
   if (flashes.length === 0) return edges;
   const matches = (edge: Edge, f: Flash) =>
     (edge.source === f.from && edge.target === f.to) || (edge.source === f.to && edge.target === f.from);
@@ -87,6 +117,8 @@ function withFlashes(edges: Edge[], flashes: Flash[]): Edge[] {
       id: `flash:${f.from}>${f.to}`,
       source: f.from,
       target: f.to,
+      ...handlesFor(f.from, f.to, ""),
+      reconnectable: false,
       className: "edge edge--flash edge--transient",
       markerEnd: { type: MarkerType.ArrowClosed },
       zIndex: 5,
@@ -128,6 +160,8 @@ export default function App() {
   const [openTerminals, setOpenTerminals] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<(Handles & { from: string; to: string }) | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<SeatFlowNode>([]);
 
   const rigName = rigs.find((rig) => rig.id === rigId)?.name ?? null;
@@ -225,7 +259,9 @@ export default function App() {
     let pending: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = onDaemonEvent((event) => {
       if (event.rigId !== rigId) return;
-      if (!event.type.startsWith("node.") && event.type !== "agent.activity") return;
+      const relevant =
+        event.type.startsWith("node.") || event.type.startsWith("edge.") || event.type === "agent.activity";
+      if (!relevant) return;
       clearTimeout(pending);
       pending = setTimeout(refresh, 300);
     });
@@ -296,11 +332,90 @@ export default function App() {
     [nodes, openTerminals, toggleTerminal],
   );
 
+  const boxes = useMemo(
+    () =>
+      new Map(
+        nodes.map((n) => [
+          n.id,
+          { x: n.position.x, y: n.position.y, w: n.measured?.width ?? 300, h: n.measured?.height ?? 95 },
+        ]),
+      ),
+    [nodes],
+  );
+  const savedHandles = layout?.edgeHandles;
+  const handlesFor = useCallback<HandlesFor>(
+    (source, target, kind) =>
+      savedHandles?.[edgeKey(source, target, kind)] ?? facingHandles(boxes.get(source), boxes.get(target)),
+    [savedHandles, boxes],
+  );
+
   const edges = useMemo(() => {
     const nodeToLogical = new Map(seats.map((s) => [s.nodeId, s.logicalId]));
-    const base = rigEdges.map((e) => toFlowEdge(e, nodeToLogical)).filter((e): e is Edge => e !== null);
-    return withFlashes(base, flashes);
-  }, [rigEdges, seats, flashes]);
+    const base = rigEdges
+      .map((e) => toFlowEdge(e, nodeToLogical, handlesFor))
+      .filter((e): e is Edge => e !== null)
+      .map((e) => (e.id === selectedEdge ? { ...e, selected: true } : e));
+    return withFlashes(base, flashes, handlesFor);
+  }, [rigEdges, seats, flashes, handlesFor, selectedEdge]);
+
+  const saveHandles = useCallback(
+    (source: string, target: string, kind: string, handles: Handles) =>
+      updateLayout((l) => ({ ...l, edgeHandles: { ...l.edgeHandles, [edgeKey(source, target, kind)]: handles } })),
+    [updateLayout],
+  );
+  const forgetHandles = useCallback(
+    (source: string, target: string, kind: string) =>
+      updateLayout((l) => {
+        const { [edgeKey(source, target, kind)]: _gone, ...edgeHandles } = l.edgeHandles ?? {};
+        return { ...l, edgeHandles };
+      }),
+    [updateLayout],
+  );
+
+  /** Only one panel at a time. */
+  const closePanels = () => {
+    setSelected(null);
+    setAdding(false);
+    setSelectedEdge(null);
+    setPendingConnection(null);
+  };
+
+  const onConnect = (connection: Connection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return;
+    closePanels();
+    setPendingConnection({
+      from: connection.source,
+      to: connection.target,
+      sourceHandle: connection.sourceHandle ?? "r",
+      targetHandle: connection.targetHandle ?? "l",
+    });
+  };
+
+  /**
+   * Dragging an edge's end. Onto another point of the same tiles: only the
+   * attachment points change. Onto another tile: the daemon edge is replaced.
+   */
+  const onReconnect = async (old: Edge, connection: Connection) => {
+    const kind = (old.data?.kind as string) ?? "";
+    const handles = { sourceHandle: connection.sourceHandle ?? "r", targetHandle: connection.targetHandle ?? "l" };
+    if (!rigId || !connection.source || !connection.target || connection.source === connection.target) return;
+    if (connection.source === old.source && connection.target === old.target) {
+      saveHandles(old.source, old.target, kind, handles);
+      return;
+    }
+    try {
+      await removeEdge(rigId, old.id);
+      forgetHandles(old.source, old.target, kind);
+      await addEdge(rigId, connection.source, connection.target, kind);
+      saveHandles(connection.source, connection.target, kind, handles);
+      setStatus(`Moved ${kind} to ${connection.source} → ${connection.target}.`);
+    } catch (e) {
+      setError(`Could not move the connection: ${e instanceof Error ? e.message : e}`);
+    }
+    refresh();
+  };
+
+  const clickedEdge = edges.find((e) => e.id === selectedEdge && !e.id.startsWith("flash:")) ?? null;
 
   const pods = useMemo(() => [...new Set(seats.map((s) => s.podNamespace))], [seats]);
   const roles = useMemo<RoleOption[]>(() => {
@@ -352,7 +467,7 @@ export default function App() {
           className="btn btn--primary toolbar__add"
           disabled={!rigId || seats.length === 0}
           onClick={() => {
-            setSelected(null);
+            closePanels();
             setAdding(true);
           }}
         >
@@ -371,10 +486,21 @@ export default function App() {
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onNodeClick={(_, node) => {
-            setAdding(false);
+            closePanels();
             setSelected(node.id);
           }}
-          onPaneClick={() => setSelected(null)}
+          onEdgeClick={(_, edge) => {
+            if (edge.id.startsWith("flash:")) return;
+            closePanels();
+            setSelectedEdge(edge.id);
+          }}
+          onPaneClick={() => {
+            setSelected(null);
+            setSelectedEdge(null);
+          }}
+          connectionMode={ConnectionMode.Loose}
+          onConnect={onConnect}
+          onReconnect={onReconnect}
           onNodeDragStop={(_, __, dragged) =>
             updateLayout((l) => ({
               ...l,
@@ -393,6 +519,39 @@ export default function App() {
           <InitialView rigId={rigId} viewport={layout === null ? undefined : layout.viewport ?? null} />
         </ReactFlow>
 
+        {pendingConnection && rigId && (
+          <ConnectPanel
+            key={`${pendingConnection.from}>${pendingConnection.to}`}
+            rigId={rigId}
+            from={pendingConnection.from}
+            to={pendingConnection.to}
+            onClose={() => setPendingConnection(null)}
+            onConnected={(kind) => {
+              const { from, to, sourceHandle, targetHandle } = pendingConnection;
+              saveHandles(from, to, kind, { sourceHandle, targetHandle });
+              setPendingConnection(null);
+              setStatus(`Connected ${from} → ${to} (${kind}).`);
+              refresh();
+            }}
+          />
+        )}
+        {clickedEdge && rigId && (
+          <EdgePanel
+            key={clickedEdge.id}
+            rigId={rigId}
+            edgeId={clickedEdge.id}
+            from={clickedEdge.source}
+            to={clickedEdge.target}
+            kind={(clickedEdge.data?.kind as string) ?? ""}
+            onClose={() => setSelectedEdge(null)}
+            onRemoved={() => {
+              forgetHandles(clickedEdge.source, clickedEdge.target, (clickedEdge.data?.kind as string) ?? "");
+              setSelectedEdge(null);
+              setStatus(`Removed ${clickedEdge.source} → ${clickedEdge.target}.`);
+              refresh();
+            }}
+          />
+        )}
         {adding && (
           <SeatPanel key="add" mode="add" pods={pods} onClose={() => setAdding(false)} {...panelProps} />
         )}

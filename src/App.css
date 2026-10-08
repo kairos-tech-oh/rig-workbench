@@ -77,6 +77,10 @@ body,
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+
+.seat__clip {
+  border-radius: inherit;
   overflow: hidden;
 }
 
@@ -407,4 +411,40 @@ body,
   margin: 0;
   color: var(--accent);
   font-size: 12px;
+}
+
+/* Attachment points: hidden until the tile is hovered or a connection is being drawn. */
+
+.seat__handle.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.react-flow__node:hover .seat__handle.react-flow__handle,
+.react-flow.connecting .seat__handle.react-flow__handle,
+.seat__handle.react-flow__handle.connectingfrom,
+.seat__handle.react-flow__handle.connectingto {
+  opacity: 1;
+}
+
+.seat__handle.react-flow__handle.connectingto {
+  background: var(--ready);
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.5 !important;
+  filter: drop-shadow(0 0 4px rgb(106 169 255 / 0.8));
+}
+
+.panel--compact {
+  bottom: auto;
+}
+
+.panel__sentence {
+  margin: 0;
+  line-height: 1.5;
 }

@@ -156,6 +156,27 @@ export function relaunchSeatFresh(session: string) {
   });
 }
 
+/** Edge kinds the daemon accepts, with a plain-language reading of each. */
+export const EDGE_KINDS: { kind: string; reads: string }[] = [
+  { kind: "delegates_to", reads: "hands work to" },
+  { kind: "can_observe", reads: "can watch" },
+  { kind: "collaborates_with", reads: "works alongside" },
+  { kind: "escalates_to", reads: "escalates to" },
+  { kind: "spawned_by", reads: "was started by" },
+];
+
+/** Connect two seats (logical ids). Needs a daemon with the edge routes. */
+export function addEdge(rigId: string, from: string, to: string, kind: string) {
+  return daemonWrite("POST", `/api/rigs/${encodeURIComponent(rigId)}/edges`, { from, to, kind });
+}
+
+export function removeEdge(rigId: string, edgeId: string) {
+  return daemonWrite(
+    "DELETE",
+    `/api/rigs/${encodeURIComponent(rigId)}/edges/${encodeURIComponent(edgeId)}`,
+  );
+}
+
 // ---- Event stream -----------------------------------------------------------
 
 export interface DaemonEvent {
