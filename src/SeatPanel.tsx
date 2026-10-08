@@ -9,15 +9,61 @@ import {
   type Seat,
 } from "./api";
 
-/** Suggestions only; any model id the runtime accepts can be typed. */
-const KNOWN_MODELS = [
-  "claude-opus-5-5",
-  "claude-sonnet-5-5",
-  "claude-fable-5-1",
-  "claude-haiku-4-5-20251001",
-];
-const RUNTIMES = ["claude-code", "codex"];
+import modelCatalog from "./models.json";
+
+interface ModelOption {
+  id: string;
+  label: string;
+}
+
+/** Models offered per runtime. Edit models.json as providers release new ones. */
+const MODELS: Record<string, ModelOption[]> = modelCatalog;
+const RUNTIMES = Object.keys(MODELS);
+const CUSTOM = "__custom__";
 const MEMBER_ID = /^[a-z0-9][a-z0-9_-]*$/i;
+
+const modelsFor = (runtime: string): ModelOption[] => MODELS[runtime] ?? [];
+const isListed = (runtime: string, model: string) => modelsFor(runtime).some((m) => m.id === model);
+
+/** A dropdown of the runtime's models, with "Custom…" for any other model id. */
+function ModelSelect(props: { runtime: string; value: string; onChange: (model: string) => void }) {
+  const options = modelsFor(props.runtime);
+  const [custom, setCustom] = useState(!!props.value && !isListed(props.runtime, props.value));
+  const showCustom = custom || options.length === 0;
+
+  return (
+    <>
+      {options.length > 0 && (
+        <select
+          value={showCustom ? CUSTOM : props.value}
+          onChange={(e) => {
+            if (e.target.value === CUSTOM) {
+              setCustom(true);
+            } else {
+              setCustom(false);
+              props.onChange(e.target.value);
+            }
+          }}
+        >
+          {options.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} ({m.id})
+            </option>
+          ))}
+          <option value={CUSTOM}>Custom…</option>
+        </select>
+      )}
+      {showCustom && (
+        <input
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+          placeholder="model id"
+          spellCheck={false}
+        />
+      )}
+    </>
+  );
+}
 
 export interface RoleOption {
   agentRef: string;
@@ -71,6 +117,7 @@ export function SeatPanel(props: Props) {
   const validationError = (): string | null => {
     if (!pod) return "Choose a pod.";
     if (!MEMBER_ID.test(memberId.trim())) return "Seat name: letters, digits, - and _ only.";
+    if (!model.trim()) return "Choose a model.";
     if (!cwd.trim()) return "Working directory is required.";
     if (!agentRef) return "Choose a role.";
     if (agentRef.startsWith("local:") && !props.rigFolder.trim()) {
@@ -122,6 +169,7 @@ export function SeatPanel(props: Props) {
       return;
     }
     if (!modelChange && !restartNow) return props.onClose();
+    if (!model.trim()) return setError("Choose a model.");
     run(restartNow ? `Restarting ${seat.logicalId}…` : "Saving…", async () => {
       if (modelChange) await setSeatModel(seat.canonicalSessionName, model.trim());
       if (restartNow) await relaunchSeatFresh(seat.canonicalSessionName);
@@ -178,14 +226,26 @@ export function SeatPanel(props: Props) {
         </label>
 
         <label className="field">
-          <span>Model</span>
-          <input list="known-models" value={model} onChange={(e) => setModel(e.target.value)} />
-          <datalist id="known-models">
-            {KNOWN_MODELS.map((m) => (
-              <option key={m} value={m} />
+          <span>Runtime</span>
+          <select
+            value={runtime}
+            onChange={(e) => {
+              const next = e.target.value;
+              setRuntime(next);
+              // A listed model belongs to its runtime; switch to the new runtime's first.
+              if (isListed(runtime, model) || !model) setModel(modelsFor(next)[0]?.id ?? "");
+            }}
+          >
+            {RUNTIMES.map((r) => (
+              <option key={r} value={r}>{r}</option>
             ))}
-          </datalist>
+          </select>
         </label>
+
+        <div className="field">
+          <span>Model</span>
+          <ModelSelect key={runtime} runtime={runtime} value={model} onChange={setModel} />
+        </div>
 
         <label className="field">
           <span>Working directory</span>
@@ -202,15 +262,6 @@ export function SeatPanel(props: Props) {
           <select value={agentRef} onChange={(e) => setAgentRef(e.target.value)}>
             {roleOptions.map((r) => (
               <option key={r.agentRef} value={r.agentRef}>{r.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="field">
-          <span>Runtime</span>
-          <select value={runtime} onChange={(e) => setRuntime(e.target.value)}>
-            {RUNTIMES.map((r) => (
-              <option key={r} value={r}>{r}</option>
             ))}
           </select>
         </label>
