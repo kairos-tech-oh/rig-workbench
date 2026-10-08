@@ -10,6 +10,8 @@ import {
   useNodesInitialized,
   useNodesState,
   useReactFlow,
+  useStore,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Viewport,
@@ -129,6 +131,21 @@ function withFlashes(edges: Edge[], flashes: Flash[], handlesFor: HandlesFor): E
   return result;
 }
 
+/** Re-measures handles React Flow dropped when a block was replaced before its size arrived. */
+function RemeasureHandles() {
+  const unmeasured = useStore((state) =>
+    Array.from(state.nodeLookup.values())
+      .filter((node) => node.measured?.width && !node.internals.handleBounds)
+      .map((node) => node.id)
+      .join("\n"),
+  );
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    if (unmeasured) updateNodeInternals(unmeasured.split("\n"));
+  }, [unmeasured, updateNodeInternals]);
+  return null;
+}
+
 /**
  * Restores the saved viewport for a rig, or frames the whole rig if none was
  * saved. Runs once per rig, after its blocks have been measured.
@@ -235,14 +252,18 @@ export default function App() {
       // Existing blocks stay where they are; new ones use their saved position.
       setNodes((current) => {
         const byId = new Map(current.map((node) => [node.id, node]));
-        return nextSeats.map((seat) => ({
-          id: seat.logicalId,
-          type: "seat" as const,
-          position: byId.get(seat.logicalId)?.position ?? saved[seat.logicalId] ?? defaults.get(seat.logicalId)!,
-          dragHandle: ".seat__header",
-          selected: byId.get(seat.logicalId)?.selected,
-          data: { seat, terminalOpen: false, onToggleTerminal: () => {}, onOpenSettings: () => {} },
-        }));
+        return nextSeats.map((seat) => {
+          const prev = byId.get(seat.logicalId);
+          // Keep React Flow's measured size; without it the block is hidden until it resizes.
+          return {
+            ...prev,
+            id: seat.logicalId,
+            type: "seat" as const,
+            position: prev?.position ?? saved[seat.logicalId] ?? defaults.get(seat.logicalId)!,
+            dragHandle: ".seat__header",
+            data: { seat, terminalOpen: false, onToggleTerminal: () => {}, onOpenSettings: () => {} },
+          };
+        });
       });
       setError(null);
     } catch (e) {
@@ -533,6 +554,7 @@ export default function App() {
           <MiniMap pannable zoomable />
           <Controls />
           <EdgeLegend kinds={edges.flatMap((e) => (e.data?.kind ? [e.data.kind as string] : []))} />
+          <RemeasureHandles />
           <InitialView rigId={rigId} viewport={layout === null ? undefined : layout.viewport ?? null} />
         </ReactFlow>
 
