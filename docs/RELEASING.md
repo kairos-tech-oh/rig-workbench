@@ -56,6 +56,10 @@ creates the **published** release `vX.Y.Z` at this commit with the
 changelog section as its notes. Creating the release creates the tag on
 GitHub; `git fetch --tags` brings it here. The script never pushes commits.
 `--dry-run` keeps what it built in a temporary folder and prints its path.
+Before publishing it checks every signature against the public key compiled
+into the app (`tools/release/verify-sig.mjs`), so a release signed with any
+other key stops there. `tools/release/publish-local.sh --check-key` makes the
+same check on a throwaway file; run it once after putting the key on a machine.
 
 Windows installers are built on a Windows machine (see "The update key" for
 the commands) and added to the same release from Git Bash:

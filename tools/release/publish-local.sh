@@ -19,6 +19,10 @@ Usage:
       installers and their .sig built on Windows), then rebuild latest.json from
       every signature on the release.
 
+  tools/release/publish-local.sh --check-key
+      Sign a throwaway file with the update key and check it against the public
+      key built into the app. Run it once after putting the key in place.
+
   --dry-run   Do everything except create or change the GitHub release.
 
 The update key is read from TAURI_SIGNING_PRIVATE_KEY and
@@ -37,6 +41,7 @@ while [ $# -gt 0 ]; do
     -h|--help) usage; exit 0 ;;
     --dry-run) dry=1 ;;
     --add) mode=add ;;
+    --check-key) mode=check-key ;;
     --daemon-tag) daemon_tag="${2:?--daemon-tag needs a tag}"; shift ;;
     --no-daemon) no_daemon=1 ;;
     -*) die "unknown option $1 (see --help)" ;;
@@ -57,7 +62,7 @@ v_cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
 [ "$v_conf" = "$v_pkg" ] && [ "$v_conf" = "$v_cargo" ] ||
   die "versions disagree: tauri.conf.json $v_conf, package.json $v_pkg, Cargo.toml $v_cargo"
 version=$v_conf tag="v$version"
-[ -z "$(git status --porcelain)" ] || die "the working tree has changes; commit or stash them first"
+[ "$mode" = check-key ] || [ -z "$(git status --porcelain)" ] || die "the working tree has changes; commit or stash them first"
 head=$(git rev-parse HEAD)
 if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
   [ "$(git rev-parse "$tag^{commit}")" = "$head" ] || die "tag $tag exists here but is not this commit"
@@ -74,6 +79,17 @@ load_key() {
   export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 }
 
+if [ "$mode" = check-key ]; then
+  load_key
+  probe=$(mktemp)
+  trap 'rm -f "$probe" "$probe.sig"' EXIT
+  echo "update key probe" > "$probe"
+  npm run tauri -- signer sign "$probe" > /dev/null
+  node tools/release/verify-sig.mjs "$probe" || die "this key is not the one installed copies trust; do not release with it"
+  echo "The update key is in place and matches the app's public key."
+  exit 0
+fi
+
 stage=$(mktemp -d)
 # A dry run keeps what it built, so it can be inspected or installed by hand.
 [ $dry = 1 ] || trap 'rm -rf "$stage"' EXIT
@@ -87,6 +103,9 @@ if [ "$mode" = add ]; then
     cp "$f" "$stage/"
   done
   # Every signature already on the release, so latest.json covers all platforms.
+  for f in "${extra[@]}"; do
+    [ ! -f "$f.sig" ] || node tools/release/verify-sig.mjs "$f" || die "$f is not signed by the update key"
+  done
   gh release download "$tag" -R "$REPO" -D "$stage" -p '*.sig' -p 'openrig-cli-*.json' --skip-existing
   node tools/release/latest-json.mjs "$stage" "$tag" "$REPO" "$stage/latest.json"
   if [ $dry = 1 ]; then
@@ -136,6 +155,10 @@ if [ -n "$daemon_tag" ]; then
   echo "Daemon $d_version (${d_commit:0:12}) signed"
 fi
 
+# Nothing ships unless installed copies would accept its signature.
+signed=("$stage"/*.AppImage)
+[ -z "$daemon_tag" ] || signed+=("$tgz")
+node tools/release/verify-sig.mjs "${signed[@]}" || die "a signature does not match the app's public key"
 node tools/release/latest-json.mjs "$stage" "$tag" "$REPO" "$stage/latest.json"
 rm -f "$stage/ci.conf.json"
 # This version's changelog section, as on the release page.
