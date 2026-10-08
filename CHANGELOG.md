@@ -5,6 +5,9 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Connections no longer carry their kind as text; a legend in the top right
+  explains each line style.
+
 ## [0.1.0] - 2026-10-08
 
 First release.

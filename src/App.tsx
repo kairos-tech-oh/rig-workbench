@@ -27,6 +27,7 @@ import {
   type RigEdge,
   type Seat,
 } from "./api";
+import { EdgeLegend, edgeStyle } from "./EdgeLegend";
 import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { SeatNode, type SeatFlowNode } from "./SeatNode";
@@ -90,15 +91,13 @@ function toFlowEdge(edge: RigEdge, nodeToLogical: Map<string, string>, handlesFo
   const source = nodeToLogical.get(edge.source);
   const target = nodeToLogical.get(edge.target);
   if (!source || !target) return null;
-  const observe = edge.label === "can_observe";
   return {
     id: edge.id,
     source,
     target,
     ...handlesFor(source, target, edge.label),
     data: { kind: edge.label },
-    label: edge.label,
-    style: observe ? { strokeDasharray: "6 4" } : { strokeWidth: 1.5 },
+    style: edgeStyle(edge.label),
     markerEnd: { type: MarkerType.ArrowClosed },
     className: `edge edge--${edge.label}`,
   };
@@ -533,6 +532,7 @@ export default function App() {
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <MiniMap pannable zoomable />
           <Controls />
+          <EdgeLegend kinds={edges.flatMap((e) => (e.data?.kind ? [e.data.kind as string] : []))} />
           <InitialView rigId={rigId} viewport={layout === null ? undefined : layout.viewport ?? null} />
         </ReactFlow>
 
