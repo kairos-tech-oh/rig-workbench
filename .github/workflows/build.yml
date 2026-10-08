@@ -120,14 +120,13 @@ jobs:
       # AppImage shells out to linuxdeploy, which needs FUSE and network at
       # bundle time. It is the Linux artifact the updater serves, so it is
       # worth having, but it must not fail the build that produced a working
-      # .deb. See docs/RELEASING.md for why libwayland is left out.
-      - name: AppImage GTK plugin without libwayland
-        if: matrix.os == 'ubuntu-22.04'
-        run: tools/release/appimage-gtk-plugin.sh
-
+      # .deb. libwayland is left out so the app uses the system's, matching
+      # its Mesa; see docs/RELEASING.md.
       - name: Bundle AppImage (best effort)
         if: matrix.os == 'ubuntu-22.04'
         continue-on-error: true
+        env:
+          LINUXDEPLOY_EXCLUDED_LIBRARIES: "libwayland-*.so*"
         run: npm run tauri -- build --bundles appimage --config ci.conf.json
 
       - name: AppImage bundles no libwayland

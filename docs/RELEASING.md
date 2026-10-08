@@ -141,10 +141,13 @@ the bundled libwayland (Mesa 25 and later) cannot create an EGL display with
 it, and the window stays blank or never opens. The `.deb` and `.rpm` link the
 system's libwayland and are unaffected.
 
-So before bundling the AppImage, the workflow runs
-`tools/release/appimage-gtk-plugin.sh`, which seeds Tauri's tool cache with
-linuxdeploy's GTK plugin, pinned and checksummed, plus one line that deletes
-`libwayland-*.so*` from the AppDir. `tools/release/appimage-check.sh` then
-fails the job if any libwayland is still inside. Both are shared with Home
-Ledger, whose `docs/RELEASING.md` has the full story; once Tauri ships a
-bundler that leaves libwayland out, both steps can go.
+So the workflow's AppImage step sets
+`LINUXDEPLOY_EXCLUDED_LIBRARIES=libwayland-*.so*`, which linuxdeploy (the
+tool Tauri bundles AppImages with, inheriting the build's environment) reads
+as filename patterns not to bundle. `tools/release/appimage-check.sh` then
+fails the job if any libwayland is still inside, because the updater gives
+every Linux copy that file.
+
+Home Ledger instead seeds Tauri's tool cache with a patched linuxdeploy GTK
+plugin. That stopped working with Tauri CLI 2.12, which embeds the plugin and
+overwrites any cached copy that differs, so it is not used here.
