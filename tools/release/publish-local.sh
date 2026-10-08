@@ -73,8 +73,9 @@ load_key() {
   if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     local key="$HOME/.tauri/rig-workbench-updater.key" pass="$HOME/.tauri/rig-workbench-updater.password.txt"
     [ -f "$key" ] || die "no update key: set TAURI_SIGNING_PRIVATE_KEY or create $key"
-    TAURI_SIGNING_PRIVATE_KEY=$(cat "$key")
-    [ -f "$pass" ] && TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$(cat "$pass")
+    # tr drops the CR a file saved on Windows ends its lines with.
+    TAURI_SIGNING_PRIVATE_KEY=$(tr -d '\r' < "$key")
+    [ -f "$pass" ] && TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$(tr -d '\r\n' < "$pass")
   fi
   export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 }
