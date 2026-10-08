@@ -5,6 +5,7 @@ const readingOf = (kind: string) => EDGE_KINDS.find((k) => k.kind === kind)?.rea
 
 interface ConnectProps {
   rigId: string;
+  rigFolder: string;
   from: string;
   to: string;
   onClose: () => void;
@@ -13,7 +14,7 @@ interface ConnectProps {
 }
 
 /** Shown after drawing a line between two tiles: choose what the connection means. */
-export function ConnectPanel({ rigId, from, to, onClose, onConnected }: ConnectProps) {
+export function ConnectPanel({ rigId, rigFolder, from, to, onClose, onConnected }: ConnectProps) {
   const [kind, setKind] = useState(EDGE_KINDS[0].kind);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export function ConnectPanel({ rigId, from, to, onClose, onConnected }: ConnectP
     setBusy(true);
     setError(null);
     try {
-      await addEdge(rigId, from, to, kind);
+      await addEdge(rigId, from, to, kind, rigFolder);
       onConnected(kind);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -62,6 +63,7 @@ export function ConnectPanel({ rigId, from, to, onClose, onConnected }: ConnectP
 
 interface EdgeProps {
   rigId: string;
+  rigFolder: string;
   edgeId: string;
   from: string;
   to: string;
@@ -71,7 +73,7 @@ interface EdgeProps {
 }
 
 /** Shown when a line is clicked: what it means, and a way to remove it. */
-export function EdgePanel({ rigId, edgeId, from, to, kind, onClose, onRemoved }: EdgeProps) {
+export function EdgePanel({ rigId, rigFolder, edgeId, from, to, kind, onClose, onRemoved }: EdgeProps) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export function EdgePanel({ rigId, edgeId, from, to, kind, onClose, onRemoved }:
     setBusy(true);
     setError(null);
     try {
-      await removeEdge(rigId, edgeId);
+      await removeEdge(rigId, { id: edgeId, from, to, kind }, rigFolder);
       onRemoved();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

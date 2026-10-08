@@ -1,6 +1,7 @@
 mod daemon;
 mod layout;
 mod pty;
+mod rig_spec;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +19,8 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
+            rig_spec::rig_spec_read,
+            rig_spec::rig_spec_write,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

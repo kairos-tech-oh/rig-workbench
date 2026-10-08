@@ -30,7 +30,9 @@ import {
 import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { SeatNode, type SeatFlowNode } from "./SeatNode";
+import { onSpecProblem } from "./rigSpec";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
+import { holdFocusOnCanvas, restoreTerminalFocus } from "./terminalFocus";
 import { useCommunicationFlashes, type Flash } from "./useCommunicationFlashes";
 
 const POLL_MS = 5000;
@@ -238,7 +240,7 @@ export default function App() {
           position: byId.get(seat.logicalId)?.position ?? saved[seat.logicalId] ?? defaults.get(seat.logicalId)!,
           dragHandle: ".seat__header",
           selected: byId.get(seat.logicalId)?.selected,
-          data: { seat, terminalOpen: false, onToggleTerminal: () => {} },
+          data: { seat, terminalOpen: false, onToggleTerminal: () => {}, onOpenSettings: () => {} },
         }));
       });
       setError(null);
@@ -271,6 +273,8 @@ export default function App() {
     };
   }, [rigId, refresh]);
 
+  useEffect(() => onSpecProblem(setError), []);
+
   useEffect(() => {
     if (!status) return;
     const timer = setTimeout(() => setStatus(null), STATUS_MS);
@@ -291,6 +295,14 @@ export default function App() {
     },
     [updateLayout],
   );
+
+  /** The tile's settings button is the only way to open its panel; clicking the tile body never does. */
+  const openSettings = useCallback((logicalId: string) => {
+    setAdding(false);
+    setSelectedEdge(null);
+    setPendingConnection(null);
+    setSelected(logicalId);
+  }, []);
 
   const onSeatRemoved = useCallback(
     (logicalId: string) => {
@@ -326,10 +338,10 @@ export default function App() {
         return {
           ...node,
           zIndex: terminalOpen ? 10 : 0,
-          data: { ...node.data, terminalOpen, onToggleTerminal: toggleTerminal },
+          data: { ...node.data, terminalOpen, onToggleTerminal: toggleTerminal, onOpenSettings: openSettings },
         };
       }),
-    [nodes, openTerminals, toggleTerminal],
+    [nodes, openTerminals, toggleTerminal, openSettings],
   );
 
   const boxes = useMemo(
@@ -404,9 +416,9 @@ export default function App() {
       return;
     }
     try {
-      await removeEdge(rigId, old.id);
+      await removeEdge(rigId, { id: old.id, from: old.source, to: old.target, kind }, rigFolder);
       forgetHandles(old.source, old.target, kind);
-      await addEdge(rigId, connection.source, connection.target, kind);
+      await addEdge(rigId, connection.source, connection.target, kind, rigFolder);
       saveHandles(connection.source, connection.target, kind, handles);
       setStatus(`Moved ${kind} to ${connection.source} → ${connection.target}.`);
     } catch (e) {
@@ -485,10 +497,6 @@ export default function App() {
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
-          onNodeClick={(_, node) => {
-            closePanels();
-            setSelected(node.id);
-          }}
           onEdgeClick={(_, edge) => {
             if (edge.id.startsWith("flash:")) return;
             closePanels();
@@ -497,7 +505,9 @@ export default function App() {
           onPaneClick={() => {
             setSelected(null);
             setSelectedEdge(null);
+            restoreTerminalFocus();
           }}
+          onMouseDownCapture={holdFocusOnCanvas}
           connectionMode={ConnectionMode.Loose}
           onConnect={onConnect}
           onReconnect={onReconnect}
@@ -507,7 +517,10 @@ export default function App() {
               positions: { ...l.positions, ...Object.fromEntries(dragged.map((n) => [n.id, n.position])) },
             }))
           }
-          onMoveEnd={(_, viewport) => updateLayout((l) => ({ ...l, viewport }))}
+          onMoveEnd={(_, viewport) => {
+            updateLayout((l) => ({ ...l, viewport }));
+            restoreTerminalFocus();
+          }}
           deleteKeyCode={null}
           minZoom={0.1}
           maxZoom={2}
@@ -523,6 +536,7 @@ export default function App() {
           <ConnectPanel
             key={`${pendingConnection.from}>${pendingConnection.to}`}
             rigId={rigId}
+            rigFolder={rigFolder}
             from={pendingConnection.from}
             to={pendingConnection.to}
             onClose={() => setPendingConnection(null)}
@@ -539,6 +553,7 @@ export default function App() {
           <EdgePanel
             key={clickedEdge.id}
             rigId={rigId}
+            rigFolder={rigFolder}
             edgeId={clickedEdge.id}
             from={clickedEdge.source}
             to={clickedEdge.target}

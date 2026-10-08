@@ -29,16 +29,17 @@ The full background, and the rig this was built against, are in the
 |---|---|
 | One block per seat: health, model, session, activity, queue count | Adding a new pod |
 | Pan, zoom, minimap, draggable blocks | Launching or stopping whole rigs |
-| **Attach** opens a live terminal in the block; typing goes to the seat | Writing `rig.yaml` (the daemon is the source of truth) |
+| **Attach** opens a live terminal in the block; typing goes to the seat, and stays there while you pan and zoom | Writing a seat's model change to `rig.yaml` |
 | **Add seat** to an existing pod; **edit** a seat's model, working directory, role or runtime; **remove** a seat | |
 | Layout saved per rig: positions, zoom/pan, open terminals | |
 | Working seats get a pulsing green outline; seats that need input, amber | |
 | An edge flashes green when its seats talk; a temporary edge appears if they have none | |
 | **Draw, move and remove connections** between any sides or corners of two tiles | |
+| Adding or removing a seat or connection also updates `rig.yaml` in the rig folder | |
 
 ### Editing seats
 
-Click a block to open its inspector; **+ Add seat** opens the same form empty.
+A block's gear button opens its inspector; **+ Add seat** opens the same form empty.
 
 - **Model:** recorded with the daemon's `set-model` and used from the seat's
   next launch. Tick **Restart now** to relaunch it fresh straight away.
@@ -51,6 +52,18 @@ Click a block to open its inspector; **+ Add seat** opens the same form empty.
   holding the rig spec. The daemon doesn't record that folder, so the GUI
   guesses it (the working directory most seats share) and saves any change
   with the layout.
+
+### Keeping `rig.yaml` in step
+
+Once the daemon accepts a change, the GUI makes the same change to `rig.yaml`
+in the rig folder: a new seat is added to its pod (a replaced seat is updated
+in place, keeping its label), a removed seat goes with every edge that
+mentions it, and connections are added to or removed from the top-level
+`edges:` list (or the pod's own list, if that is where one is declared).
+Only the touched entries change; comments, quoting and layout are kept.
+
+If the file can't be updated (no `rig.yaml` in the rig folder, or it changed
+on disk mid-update), the toolbar says so and the daemon change stands.
 
 The model dropdown lists the models in `src/models.json` for the seat's
 runtime; **Custom…** takes any other model id.
@@ -141,6 +154,6 @@ no WSL.
 
 1. Drag seat types from a palette onto the canvas; draw edges between blocks.
 2. Add pods (the daemon's `expand` route).
-3. Export the live rig to `rig.yaml` (`rig export`) so the spec stays in step
-   with GUI edits.
+3. Move the `rig.yaml` update into the daemon, so `rig` CLI edits keep the
+   spec in step too. It needs the daemon to record each rig's spec path.
 4. Replace seat polling entirely with the event stream.

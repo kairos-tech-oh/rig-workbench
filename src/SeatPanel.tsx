@@ -157,7 +157,7 @@ export function SeatPanel(props: Props) {
       if (invalid) return setError(invalid);
       if (confirming !== "replace") return setConfirming("replace");
       run(`Replacing ${seat.logicalId}…`, async () => {
-        await removeSeat(props.rigId, seat.logicalId);
+        await removeSeat(props.rigId, seat.logicalId, null);
         try {
           await addSeat(props.rigId, pod, member(), props.rigFolder.trim());
         } catch (e) {
@@ -182,7 +182,7 @@ export function SeatPanel(props: Props) {
     if (!seat || props.mode !== "edit") return;
     if (confirming !== "remove") return setConfirming("remove");
     run(`Removing ${seat.logicalId}…`, async () => {
-      await removeSeat(props.rigId, seat.logicalId);
+      await removeSeat(props.rigId, seat.logicalId, props.rigFolder.trim());
       props.onRemoved(seat.logicalId);
       return `Removed ${seat.logicalId}.`;
     });

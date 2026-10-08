@@ -149,6 +149,23 @@ body,
   background: var(--panel);
 }
 
+.seat__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 5px;
+  cursor: pointer;
+}
+
+.seat__settings:hover {
+  background: var(--panel);
+  color: var(--accent);
+}
+
 .seat__meta {
   display: flex;
   justify-content: space-between;

@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { updateRigSpec } from "./rigSpec";
 
 export interface Rig {
   id: string;
@@ -112,9 +113,16 @@ export interface MemberConfig {
   model: string;
 }
 
-/** Add a seat to an existing pod and launch it. `rigRoot` resolves `local:` agent refs. */
-export function addSeat(rigId: string, pod: string, member: MemberConfig, rigRoot: string) {
-  return daemonWrite(
+// Each topology write below also updates rig.yaml in the rig folder once the
+// daemon has accepted it, so the spec keeps matching the running rig.
+
+/**
+ * Add a seat to an existing pod and launch it. `rigRoot` is the rig folder: it
+ * resolves `local:` agent refs and holds the rig.yaml the seat is added to (or
+ * updated in, when a seat of that name is already declared).
+ */
+export async function addSeat(rigId: string, pod: string, member: MemberConfig, rigRoot: string) {
+  await daemonWrite(
     "POST",
     `/api/rigs/${encodeURIComponent(rigId)}/pods/${encodeURIComponent(pod)}/members`,
     {
@@ -129,14 +137,31 @@ export function addSeat(rigId: string, pod: string, member: MemberConfig, rigRoo
       rigRoot,
     },
   );
+  await updateRigSpec(rigRoot, {
+    op: "upsertMember",
+    pod,
+    member: {
+      id: member.id,
+      agent_ref: member.agentRef,
+      runtime: member.runtime,
+      model: member.model || undefined,
+      profile: member.profile,
+      cwd: member.cwd,
+    },
+  });
 }
 
-/** Stop a seat and remove it from the rig. */
-export function removeSeat(rigId: string, logicalId: string) {
-  return daemonWrite(
+/**
+ * Stop a seat and remove it from the rig, and from rig.yaml in `rigFolder`
+ * along with its edges. `null` leaves the spec alone: a seat being replaced
+ * keeps its entry, which the following `addSeat` updates in place.
+ */
+export async function removeSeat(rigId: string, logicalId: string, rigFolder: string | null) {
+  await daemonWrite(
     "DELETE",
     `/api/rigs/${encodeURIComponent(rigId)}/nodes/${encodeURIComponent(logicalId)}`,
   );
+  if (rigFolder !== null) await updateRigSpec(rigFolder, { op: "removeMember", logicalId });
 }
 
 /** Record a new model. It takes effect the next time the seat launches. */
@@ -166,15 +191,22 @@ export const EDGE_KINDS: { kind: string; reads: string }[] = [
 ];
 
 /** Connect two seats (logical ids). Needs a daemon with the edge routes. */
-export function addEdge(rigId: string, from: string, to: string, kind: string) {
-  return daemonWrite("POST", `/api/rigs/${encodeURIComponent(rigId)}/edges`, { from, to, kind });
+export async function addEdge(rigId: string, from: string, to: string, kind: string, rigFolder: string) {
+  await daemonWrite("POST", `/api/rigs/${encodeURIComponent(rigId)}/edges`, { from, to, kind });
+  await updateRigSpec(rigFolder, { op: "addEdge", from, to, kind });
 }
 
-export function removeEdge(rigId: string, edgeId: string) {
-  return daemonWrite(
+/** Disconnect two seats. `from`, `to` and `kind` find the edge in rig.yaml. */
+export async function removeEdge(
+  rigId: string,
+  edge: { id: string; from: string; to: string; kind: string },
+  rigFolder: string,
+) {
+  await daemonWrite(
     "DELETE",
-    `/api/rigs/${encodeURIComponent(rigId)}/edges/${encodeURIComponent(edgeId)}`,
+    `/api/rigs/${encodeURIComponent(rigId)}/edges/${encodeURIComponent(edge.id)}`,
   );
+  await updateRigSpec(rigFolder, { op: "removeEdge", from: edge.from, to: edge.to, kind: edge.kind });
 }
 
 // ---- Event stream -----------------------------------------------------------

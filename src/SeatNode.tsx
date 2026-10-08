@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { Seat } from "./api";
 import { SeatTerminal } from "./SeatTerminal";
@@ -6,6 +7,7 @@ export type SeatNodeData = {
   seat: Seat;
   terminalOpen: boolean;
   onToggleTerminal: (logicalId: string) => void;
+  onOpenSettings: (logicalId: string) => void;
 };
 
 export type SeatFlowNode = Node<SeatNodeData, "seat">;
@@ -39,7 +41,10 @@ function seatHealth(seat: Seat): Health {
 }
 
 export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
-  const { seat, terminalOpen, onToggleTerminal } = data;
+  const { seat, terminalOpen, onToggleTerminal, onOpenSettings } = data;
+  // Set when this tile's Attach button opens the terminal, so typing works
+  // straight away. Terminals restored from the saved layout don't take focus.
+  const [focusOnAttach, setFocusOnAttach] = useState(false);
   const health = seatHealth(seat);
   // working | idle | needs-input | unknown
   const activity = seat.activityState?.display ?? "unknown";
@@ -67,11 +72,28 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
             className="seat__toggle nodrag"
             onClick={(event) => {
               event.stopPropagation();
+              setFocusOnAttach(!terminalOpen);
               onToggleTerminal(seat.logicalId);
             }}
             title={terminalOpen ? "Detach terminal" : "Attach terminal"}
           >
             {terminalOpen ? "Detach" : "Attach"}
+          </button>
+          <button
+            className="seat__settings nodrag"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenSettings(seat.logicalId);
+            }}
+            title="Seat settings"
+            aria-label="Seat settings"
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"
+              />
+            </svg>
           </button>
         </header>
         <div className="seat__meta">
@@ -82,7 +104,7 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
           </span>
         </div>
         {seat.cwd && <div className="seat__cwd">{seat.cwd}</div>}
-        {terminalOpen && <SeatTerminal session={seat.canonicalSessionName} />}
+        {terminalOpen && <SeatTerminal session={seat.canonicalSessionName} autoFocus={focusOnAttach} />}
       </div>
     </div>
   );

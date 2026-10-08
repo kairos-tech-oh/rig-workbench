@@ -3,6 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { trackTerminalFocus } from "./terminalFocus";
 
 type PtyEvent = { kind: "data"; b64: string } | { kind: "exit" };
 
@@ -17,7 +18,7 @@ function decodeBase64(b64: string): Uint8Array {
  * A live terminal attached to a seat's tmux session. Unmounting detaches the
  * tmux client; the seat itself keeps running.
  */
-export function SeatTerminal({ session }: { session: string }) {
+export function SeatTerminal({ session, autoFocus = false }: { session: string; autoFocus?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,6 +39,9 @@ export function SeatTerminal({ session }: { session: string }) {
     term.loadAddon(fit);
     term.open(container);
     fit.fit();
+    const untrackFocus = trackTerminalFocus(term);
+    // Keyboard focus otherwise follows the click: xterm focuses itself on mousedown.
+    if (autoFocus) term.focus();
 
     const channel = new Channel<PtyEvent>();
     channel.onmessage = (event) => {
@@ -66,9 +70,11 @@ export function SeatTerminal({ session }: { session: string }) {
       disposed = true;
       resize.disconnect();
       input.dispose();
+      untrackFocus();
       term.dispose();
       invoke("pty_close", { id }).catch(() => {});
     };
+    // autoFocus only matters at mount; it must not reattach the terminal.
   }, [session]);
 
   // nodrag/nowheel/nopan: inside the terminal, mouse and wheel belong to the
