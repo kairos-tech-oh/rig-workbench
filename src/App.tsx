@@ -35,6 +35,7 @@ import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "
 import { SeatNode, type SeatFlowNode } from "./SeatNode";
 import { onSpecProblem } from "./rigSpec";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
+import { openSettingsWindow, useAppliedSettings } from "./settings";
 import { holdFocusOnCanvas, restoreTerminalFocus } from "./terminalFocus";
 import { UpdateBanner, useUpdates, VersionButton } from "./updates";
 import { useCommunicationFlashes, type Flash } from "./useCommunicationFlashes";
@@ -186,6 +187,19 @@ export default function App() {
   const rigName = rigs.find((rig) => rig.id === rigId)?.name ?? null;
   const flashes = useCommunicationFlashes(seats);
   const updates = useUpdates();
+  useAppliedSettings();
+
+  // Capture phase, so Ctrl+, still works while an attached terminal has focus.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key !== ",") return;
+      event.preventDefault();
+      event.stopPropagation();
+      openSettingsWindow();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   // ---- Layout persistence ----------------------------------------------------
 
@@ -513,6 +527,9 @@ export default function App() {
         {status && <span className="toolbar__status">{status}</span>}
         {error && <span className="toolbar__error">{error}</span>}
         <VersionButton updates={updates} />
+        <button className="toolbar__settings" onClick={openSettingsWindow} title="Settings (Ctrl+,)">
+          Settings
+        </button>
       </header>
       <UpdateBanner updates={updates} />
       <div className="canvas">

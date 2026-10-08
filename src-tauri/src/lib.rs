@@ -2,6 +2,7 @@ mod daemon;
 mod layout;
 mod pty;
 mod rig_spec;
+mod settings;
 mod updates;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,6 +31,9 @@ pub fn run() {
             pty::pty_close,
             rig_spec::rig_spec_read,
             rig_spec::rig_spec_write,
+            settings::settings_load,
+            settings::settings_save,
+            settings::settings_open,
             updates::update_check,
             updates::update_install,
             updates::app_version,
