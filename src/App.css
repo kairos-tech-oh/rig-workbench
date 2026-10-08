@@ -9,19 +9,20 @@
   --ready: #3fca7a;
   --attention: #f0b232;
   --down: #e5534b;
+  --backdrop-opacity: 1; /* set from Settings; only the canvas backdrop uses it */
   color-scheme: dark;
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   color: var(--text);
-  background: var(--bg);
 }
 
+/* Transparent so the window can show through the canvas backdrop. */
 html,
 body,
 #root {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background: transparent;
 }
 
 .app {
@@ -67,6 +68,11 @@ body,
 .canvas {
   flex: 1;
   min-height: 0;
+}
+
+/* React Flow's dark backdrop (#141414), faded by the opacity setting. */
+.canvas .react-flow {
+  --xy-background-color: rgb(20 20 20 / var(--backdrop-opacity));
 }
 
 /* Seat block */
@@ -557,4 +563,57 @@ body,
 
 .legend__sample path {
   fill: none;
+}
+
+/* Settings window */
+
+.toolbar__settings {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.toolbar__settings:hover {
+  color: var(--accent);
+}
+
+.settings {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 18px 20px;
+  background: var(--panel);
+}
+
+.settings__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings__row input {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.settings__value {
+  width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings__hint {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings__error {
+  margin: 8px 0 0;
+  color: var(--down);
 }

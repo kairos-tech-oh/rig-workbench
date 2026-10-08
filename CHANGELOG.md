@@ -5,6 +5,10 @@ when it offers that update.
 
 ## [Unreleased]
 
+- A Settings window (toolbar button or Ctrl+,) with a background opacity
+  slider: the canvas backdrop can fade to show the desktop behind it, while
+  seats and connections stay solid. The setting is remembered.
+
 ## [0.1.1] - 2026-10-08
 
 - Connections no longer carry their kind as text; a legend in the top right

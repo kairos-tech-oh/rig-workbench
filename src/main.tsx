@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import App from "./App";
+import { SettingsWindow } from "./settings";
 
 /** Shows a render crash instead of leaving the window blank. */
 class CrashScreen extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -27,7 +29,7 @@ class CrashScreen extends React.Component<{ children: React.ReactNode }, { error
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <CrashScreen>
-      <App />
+      {getCurrentWebviewWindow().label === "settings" ? <SettingsWindow /> : <App />}
     </CrashScreen>
   </React.StrictMode>,
 );
