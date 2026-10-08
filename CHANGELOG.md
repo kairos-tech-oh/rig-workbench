@@ -5,6 +5,8 @@ when it offers that update.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
 - Settings has an Updates section showing the app and OpenRig daemon versions,
   with one button that updates the daemon (Linux) and then the app. The daemon
   is only replaced by a newer signed fork release, never a source build.
