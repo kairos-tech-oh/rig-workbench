@@ -71,7 +71,10 @@ fn matches_pattern(pattern: &str, path: &str) -> bool {
     let pattern: Vec<&str> = pattern.split('/').collect();
     let path: Vec<&str> = path.split('/').collect();
     pattern.len() == path.len()
-        && pattern.iter().zip(&path).all(|(p, s)| if *p == "*" { !s.is_empty() } else { p == s })
+        && pattern
+            .iter()
+            .zip(&path)
+            .all(|(p, s)| if *p == "*" { !s.is_empty() } else { p == s })
 }
 
 fn check_write(method: &str, path: &str) -> Result<reqwest::Method, String> {
@@ -80,9 +83,15 @@ fn check_write(method: &str, path: &str) -> Result<reqwest::Method, String> {
         .iter()
         .any(|(m, pattern)| *m == method && matches_pattern(pattern, path));
     if !allowed {
-        return Err(format!("refusing {method} {path}: not an operation Rig Workbench performs"));
+        return Err(format!(
+            "refusing {method} {path}: not an operation Rig Workbench performs"
+        ));
     }
-    Ok(if method == "DELETE" { reqwest::Method::DELETE } else { reqwest::Method::POST })
+    Ok(if method == "DELETE" {
+        reqwest::Method::DELETE
+    } else {
+        reqwest::Method::POST
+    })
 }
 
 #[derive(Serialize)]
@@ -96,18 +105,29 @@ pub struct WriteResult {
 /// Make an allowlisted write. Non-2xx responses are returned, not raised, so
 /// the UI can show the daemon's own explanation (for example a 409 refusal).
 #[tauri::command]
-pub async fn daemon_write(method: String, path: String, body: Option<serde_json::Value>) -> Result<WriteResult, String> {
+pub async fn daemon_write(
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<WriteResult, String> {
     let http_method = check_write(&method, &path)?;
     let url = format!("{}{}", daemon_url(), path);
     let mut request = client().request(http_method, &url).timeout(WRITE_TIMEOUT);
     if let Some(body) = body {
         request = request.json(&body);
     }
-    let response = request.send().await.map_err(|e| format!("daemon unreachable at {url}: {e}"))?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("daemon unreachable at {url}: {e}"))?;
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
     let body = serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text));
-    Ok(WriteResult { ok: status.is_success(), status: status.as_u16(), body })
+    Ok(WriteResult {
+        ok: status.is_success(),
+        status: status.as_u16(),
+        body,
+    })
 }
 
 #[derive(Default)]

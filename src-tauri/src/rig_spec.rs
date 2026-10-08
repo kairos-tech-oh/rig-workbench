@@ -22,7 +22,8 @@ fn spec_path(folder: &str) -> Result<PathBuf, String> {
 #[cfg(windows)]
 fn native_path(linux: &str) -> PathBuf {
     let parts: Vec<&str> = linux.split('/').filter(|p| !p.is_empty()).collect();
-    if parts.len() >= 2 && parts[0] == "mnt" && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic()) {
+    if parts.len() >= 2 && parts[0] == "mnt" && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic())
+    {
         let mut path = PathBuf::from(format!("{}:\\", parts[1].to_ascii_uppercase()));
         path.extend(&parts[2..]);
         return path;
@@ -54,7 +55,10 @@ pub async fn rig_spec_write(folder: String, text: String, expected: String) -> R
     let path = spec_path(&folder)?;
     let current = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     if current != expected {
-        return Err(format!("{} changed while it was being updated; left as it is", path.display()));
+        return Err(format!(
+            "{} changed while it was being updated; left as it is",
+            path.display()
+        ));
     }
     let tmp = path.with_extension("yaml.workbench-tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("could not write {}: {e}", tmp.display()))?;
@@ -78,7 +82,10 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn maps_wsl_paths_to_windows() {
-        assert_eq!(spec_path("/mnt/e/rigs/workbench").unwrap(), PathBuf::from(r"E:\rigs\workbench\rig.yaml"));
+        assert_eq!(
+            spec_path("/mnt/e/rigs/workbench").unwrap(),
+            PathBuf::from(r"E:\rigs\workbench\rig.yaml")
+        );
         let home = spec_path("/home/me/rig").unwrap();
         assert!(home.to_string_lossy().starts_with(r"\\wsl.localhost\"));
         assert!(home.to_string_lossy().ends_with(r"home\me\rig\rig.yaml"));

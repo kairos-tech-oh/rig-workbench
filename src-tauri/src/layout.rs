@@ -12,7 +12,13 @@ use tauri::{AppHandle, Manager};
 fn layout_path(app: &AppHandle, rig_name: &str) -> Result<PathBuf, String> {
     let safe: String = rig_name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if safe.is_empty() || safe.starts_with('.') {
         return Err(format!("invalid rig name '{rig_name}'"));

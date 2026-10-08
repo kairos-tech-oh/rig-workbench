@@ -48,7 +48,9 @@ pub struct PtyRegistry {
 pub enum PtyEvent {
     /// Terminal output, base64-encoded so multi-byte characters split across
     /// reads survive the trip to the webview intact.
-    Data { b64: String },
+    Data {
+        b64: String,
+    },
     Exit,
 }
 
@@ -99,7 +101,12 @@ pub async fn pty_open(
     }
 
     let pair = native_pty_system()
-        .openpty(PtySize { rows: rows.max(2), cols: cols.max(2), pixel_width: 0, pixel_height: 0 })
+        .openpty(PtySize {
+            rows: rows.max(2),
+            cols: cols.max(2),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|e| format!("failed to open pty: {e}"))?;
     let child = pair
         .slave
@@ -126,7 +133,14 @@ pub async fn pty_open(
         let _ = on_event.send(PtyEvent::Exit);
     });
 
-    sessions.insert(id, PtySession { master: pair.master, writer, child });
+    sessions.insert(
+        id,
+        PtySession {
+            master: pair.master,
+            writer,
+            child,
+        },
+    );
     Ok(())
 }
 
@@ -144,7 +158,12 @@ pub async fn pty_resize(registry: State<'_, PtyRegistry>, id: String, cols: u16,
     let session = sessions.get(&id).ok_or_else(|| format!("no terminal '{id}'"))?;
     session
         .master
-        .resize(PtySize { rows: rows.max(2), cols: cols.max(2), pixel_width: 0, pixel_height: 0 })
+        .resize(PtySize {
+            rows: rows.max(2),
+            cols: cols.max(2),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|e| e.to_string())
 }
 
