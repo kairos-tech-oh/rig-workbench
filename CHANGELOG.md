@@ -5,6 +5,8 @@ when it offers that update.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-08
+
 - Connections no longer carry their kind as text; a legend in the top right
   explains each line style.
 - Fix connections missing and seat blocks vanishing a few seconds after
