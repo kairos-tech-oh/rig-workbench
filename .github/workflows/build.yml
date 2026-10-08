@@ -48,9 +48,29 @@ jobs:
 
   # Installers are built for a release tag, or on demand from the Actions
   # tab, not on every push.
+  # A tag whose release tools/release/publish-local.sh already published is
+  # left alone: rebuilding it would replace that release's files with a draft.
+  released:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.view.outputs.exists }}
+    steps:
+      - id: view
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   bundle:
-    needs: check
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [check, released]
+    if: >-
+      always() && needs.check.result == 'success' && needs.released.outputs.exists != 'true' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     # Signing material is only offered to builds of this repository's own
     # branches and tags; a pull request from a fork gets none and builds
     # unsigned, which ci-config.mjs allows for.

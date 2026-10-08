@@ -5,7 +5,10 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(|e| format!("no app data directory: {e}"))?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data directory: {e}"))?;
     Ok(dir.join("settings.json"))
 }
 
@@ -44,7 +47,7 @@ pub async fn settings_open(app: AppHandle) -> Result<(), String> {
     }
     WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html".into()))
         .title("Rig Workbench Settings")
-        .inner_size(380.0, 170.0)
+        .inner_size(440.0, 330.0)
         .resizable(false)
         .build()
         .map(|_| ())

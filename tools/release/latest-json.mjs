@@ -36,16 +36,26 @@ const wanted = {
   "linux-x86_64": (f) => f.endsWith(".AppImage"),
 };
 
-const all = files(dir);
+// Only the .sig files are read; the installer each names need not be here,
+// so a later run can rebuild this from a published release's signatures.
+const sigs = files(dir).filter((f) => f.endsWith(".sig"));
 const platforms = {};
 for (const [platform, matches] of Object.entries(wanted)) {
-  const installer = all.find((f) => matches(f) && f.includes(version));
-  const sig = installer && all.find((f) => f === `${installer}.sig`);
-  if (!installer || !sig) {
+  const sig = sigs.find((f) => matches(f.slice(0, -4)) && basename(f).includes(version));
+  if (!sig) {
     console.warn(`no signed installer for ${platform}; it will not be offered this update`);
     continue;
   }
-  platforms[platform] = { signature: readFileSync(sig, "utf8").trim(), url: assetUrl(installer) };
+  platforms[platform] = { signature: readFileSync(sig, "utf8").trim(), url: assetUrl(sig.slice(0, -4)) };
+}
+
+// The OpenRig daemon this release goes with, if publish-local.sh attached one.
+let daemon;
+const daemonSig = sigs.find((f) => /^openrig-cli-.+\.tgz\.sig$/.test(basename(f)));
+if (daemonSig) {
+  const tarball = daemonSig.slice(0, -4);
+  const { version: daemonVersion, commit } = JSON.parse(readFileSync(tarball.replace(/\.tgz$/, ".json"), "utf8"));
+  daemon = { version: daemonVersion, commit, url: assetUrl(tarball), signature: readFileSync(daemonSig, "utf8").trim() };
 }
 
 if (Object.keys(platforms).length === 0) {
@@ -69,6 +79,8 @@ try {
 
 writeFileSync(
   out,
-  JSON.stringify({ version, notes, pub_date: new Date().toISOString(), platforms }, null, 2),
+  JSON.stringify({ version, notes, pub_date: new Date().toISOString(), platforms, daemon }, null, 2),
 );
-console.log(`latest.json for ${version}: ${Object.keys(platforms).join(", ")}`);
+console.log(
+  `latest.json for ${version}: ${Object.keys(platforms).join(", ")}${daemon ? `; daemon ${daemon.version}` : ""}`,
+);

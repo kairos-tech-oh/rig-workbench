@@ -4,6 +4,20 @@ How a version goes from `main` to every installed copy.
 
 ## What a release is
 
+A release is a published GitHub release `vX.Y.Z` holding the installers, a
+`.sig` beside each one the updater serves, the OpenRig daemon tarball for that
+version (`openrig-cli-<version>.tgz` and its `.sig`), and `latest.json`.
+Installed copies read
+`https://github.com/kairos-tech-oh/rig-workbench/releases/latest/download/latest.json`
+(`plugins.updater.endpoints` in `src-tauri/tauri.conf.json`), which only
+resolves once the release is **published**, not a draft.
+
+The repository is public, so the updater and anyone downloading an installer
+fetch the files anonymously, and GitHub Actions minutes cost nothing. There are
+two ways to build a release; both need the update key.
+
+### With GitHub Actions
+
 Pushing a tag `vX.Y.Z` runs `.github/workflows/build.yml`:
 
 1. `check` type-checks and builds the front end, then checks formatting,
@@ -14,13 +28,48 @@ Pushing a tag `vX.Y.Z` runs `.github/workflows/build.yml`:
    With the update key available it also writes a `.sig` beside each
    installer the updater can use.
 3. `release` writes `latest.json` from those signatures and creates a **draft**
-   GitHub release with everything attached.
+   GitHub release with everything attached. Publishing that draft (not a new
+   release made by hand from the tag) is what ships it.
 
-A draft is invisible to installed copies. They read
-`https://github.com/kairos-tech-oh/rig-workbench/releases/latest/download/latest.json`
-(`plugins.updater.endpoints` in `src-tauri/tauri.conf.json`), which only
-resolves once the release is **published**. Publishing the draft Actions
-made — not a new release made by hand from the tag — is what ships it.
+A tag whose release already exists (one `publish-local.sh` made) is skipped by
+`bundle` and `release`, so Actions never rebuilds or redrafts it. The Actions
+route does not attach a daemon tarball: add it with `publish-local.sh --add`,
+or the release's `latest.json` names no daemon and Settings says so.
+
+### Publishing without Actions
+
+`tools/release/publish-local.sh` builds and publishes from the maintainer's
+Linux machine, with no Actions minutes:
+
+```bash
+tools/release/publish-local.sh --dry-run --daemon-tag v0.6.8-kairos.1   # builds, signs, writes latest.json, publishes nothing
+tools/release/publish-local.sh --daemon-tag v0.6.8-kairos.1
+```
+
+It refuses to run on a working tree with changes, when `tauri.conf.json`,
+`Cargo.toml` and `package.json` disagree on the version, when a local tag
+`vX.Y.Z` points at another commit, when the release already exists, or when
+the commit is not on GitHub (push the branch yourself first). It then builds
+the AppImage, deb and rpm signed with the update key, checks the AppImage
+carries no libwayland, attaches the daemon (below), writes `latest.json`, and
+creates the **published** release `vX.Y.Z` at this commit with the
+changelog section as its notes. Creating the release creates the tag on
+GitHub; `git fetch --tags` brings it here. The script never pushes commits.
+`--dry-run` keeps what it built in a temporary folder and prints its path.
+
+Windows installers are built on a Windows machine (see "The update key" for
+the commands) and added to the same release from Git Bash:
+
+```bash
+tools/release/publish-local.sh --add \
+  "src-tauri/target/release/bundle/nsis/Rig Workbench_X.Y.Z_x64-setup.exe" \
+  "src-tauri/target/release/bundle/nsis/Rig Workbench_X.Y.Z_x64-setup.exe.sig" \
+  "src-tauri/target/release/bundle/msi/Rig Workbench_X.Y.Z_x64_en-US.msi"
+```
+
+`--add` uploads the files, downloads every signature already on the release
+and replaces `latest.json` with one covering all of them. Until it runs, a
+Windows copy is simply not offered the update.
 
 ## Cutting one
 
@@ -30,55 +79,68 @@ made — not a new release made by hand from the tag — is what ships it.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
    and start a new empty `Unreleased` above it. That section becomes the notes
    the app shows under "What's new".
-3. Commit to `main`, tag the commit `vX.Y.Z`, push the tag.
-4. When the workflow is green, open the draft release, read it, publish it.
+3. Commit to `main` and push it.
+4. Either run `tools/release/publish-local.sh --daemon-tag <fork tag>`, or tag
+   the commit `vX.Y.Z`, push the tag, and publish the draft when the workflow
+   is green.
 
 Each copy checks on launch and offers the update under the toolbar; clicking
-the version number in the toolbar checks on demand. On Windows the installer
-runs passively and the app restarts itself.
+the version number in the toolbar, or **Settings → Updates**, checks on
+demand. On Windows the installer runs passively and the app restarts itself.
 
-## The repository must be reachable without signing in
+## The OpenRig daemon
 
-The updater, and anyone downloading an installer, fetch the release files
-anonymously. **While `kairos-tech-oh/rig-workbench` is private, those requests
-get a 404**: an installed copy reports "could not check for updates", and
-installers can only be downloaded by someone signed in to GitHub with access
-to the repository. Builds and draft releases still work; nothing can be
-fetched from them automatically.
+The app needs the edge routes of the fork
+[kairos-tech-oh/openrig](https://github.com/kairos-tech-oh/openrig). The
+contract with the fork, agreed with its maintainers:
 
-Ways to make it work, in order of simplicity:
+- Versions are upstream's next patch plus a suffix, `X.Y.(Z+1)-kairos.N`
+  (upstream 0.6.7 gives 0.6.8-kairos.1, .2, …), so a fork build sorts above
+  the upstream release it is based on and is never mistaken for it.
+- Each is a published GitHub release tagged `v<version>`, built with
+  `scripts/build-package.sh` from the clean tagged commit, so the daemon's
+  `/healthz` reports that version, that commit and `dirty: false`.
+- Its assets are exactly `openrig-cli-<version>.tgz` and
+  `openrig-cli-<version>.tgz.sha256` (`sha256sum` format).
 
-- **Make the repository public.** Everything here works as written. The
-  source becomes public too.
-- **Publish releases to a separate public repository** (for example
-  `kairos-tech-oh/rig-workbench-releases`) that holds only release files. The
-  source stays private. The `release` job then needs a token that can write
-  to that repository (a fine-grained personal access token, stored as a
-  secret), `softprops/action-gh-release` gets `repository:` and `token:`, and
-  `latest-json.mjs` and the updater endpoint name that repository.
-- **Host `latest.json` and the installers elsewhere** that serves them
-  publicly (an object store bucket, or GitHub Pages of a public repository),
-  uploaded by the `release` job. The endpoint points there.
-- **Not recommended:** building a GitHub token into the app so it can read the
-  private repository's releases. Every installed copy would carry the token.
+`publish-local.sh --daemon-tag v<version>` downloads those two files, checks the
+sha256, reads the version and commit stamped inside the tarball (refusing a
+dirty build or one that does not match the tag), and **signs the tarball with
+the app's update key**. The tarball, its `.sig` and a small
+`openrig-cli-<version>.json` go on the app release, and `latest.json` gets:
 
-Without any of these, installs are manual: download the installer from the
-release page while signed in, and run it. The in-app check then fails quietly
-at launch, and with a message when clicked.
+```json
+"daemon": { "version": "0.6.8-kairos.1", "commit": "…", "url": "…/openrig-cli-0.6.8-kairos.1.tgz", "signature": "…" }
+```
 
-GitHub Actions minutes on a private repository are billed against the
-account's allowance, and Windows runners count double.
+So the daemon is trusted the same way as the app: the app downloads the
+tarball and installs it only if its signature verifies against the public key
+compiled into the app (`src-tauri/src/daemon_update.rs`). The fork's sha256 only
+guards the hop from the fork release to the maintainer's machine.
+
+**Settings → Updates** offers the daemon only when the running daemon is an
+older fork release: it leaves alone a daemon that is up to date, newer, built
+from a dirty tree, built from source at the released version (same version,
+other commit), or not a fork release at all. The update stops the daemon
+(`rig daemon stop` leaves tmux seats running; the queue is in SQLite on disk),
+installs the tarball with the npm next to the node the daemon runs on and into
+the prefix it was installed in, and starts it with the environment the old
+daemon had, adding `--no-kernel` when no kernel rig is managed. A failed install
+starts the previous daemon again. This is Linux only; on Windows the daemon runs
+in WSL and is updated there by hand.
 
 ## The update key
 
 Updates are signed with a minisign key. The public half is in
 `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`) and is compiled into
-every build; the private half signs releases in CI. An installed copy refuses
+every build; the private half signs releases (in CI or in `publish-local.sh`)
+and the daemon tarball. An installed copy refuses
 any update the private key did not sign.
 
 The private key and its password are held by the maintainer, outside the
 repository (on the build machine: `%USERPROFILE%\.tauri\rig-workbench-updater.key`
-and `rig-workbench-updater.password.txt`). It is a different key from Home
+and `rig-workbench-updater.password.txt`, or `~/.tauri/` on Linux, where
+`publish-local.sh` looks for them). It is a different key from Home
 Ledger's. In the repository's **Settings → Secrets and variables → Actions**
 they are:
 

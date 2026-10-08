@@ -617,3 +617,39 @@ body,
   margin: 8px 0 0;
   color: var(--down);
 }
+
+.settings__section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.settings__heading {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings__versions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+}
+
+.settings__versions dt {
+  color: var(--muted);
+}
+
+.settings__versions dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings__section .settings__hint {
+  margin: 0 0 10px;
+}
+
+.settings__error {
+  white-space: pre-wrap;
+}

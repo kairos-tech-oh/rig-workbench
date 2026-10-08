@@ -108,3 +108,103 @@ export function UpdateBanner({ updates }: { updates: ReturnType<typeof useUpdate
     </div>
   );
 }
+
+interface DaemonStatus {
+  installed: string | null;
+  installedCommit: string | null;
+  available: string | null;
+  canUpdate: boolean;
+  note: string;
+}
+
+type Phase = "checking" | "ready" | "daemon" | "app" | "done";
+
+/** The Settings window's Updates section: one button updates the daemon, then the app. */
+export function UpdatesSection() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [app, setApp] = useState<UpdateInfo | null>(null);
+  const [daemon, setDaemon] = useState<DaemonStatus | null>(null);
+  const [phase, setPhase] = useState<Phase>("checking");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const check = useCallback(async () => {
+    setPhase("checking");
+    setError(null);
+    setMessage(null);
+    const [appResult, daemonResult] = await Promise.allSettled([
+      invoke<UpdateInfo | null>("update_check"),
+      invoke<DaemonStatus>("daemon_update_check"),
+    ]);
+    setApp(appResult.status === "fulfilled" ? appResult.value : null);
+    setDaemon(daemonResult.status === "fulfilled" ? daemonResult.value : null);
+    const failures = [appResult, daemonResult].flatMap((r) => (r.status === "rejected" ? [String(r.reason)] : []));
+    setError(failures.length ? failures.join("\n") : null);
+    setPhase("ready");
+  }, []);
+
+  useEffect(() => {
+    invoke<string>("app_version").then(setVersion, () => {});
+    check();
+  }, [check]);
+
+  const update = async () => {
+    setError(null);
+    try {
+      if (daemon?.canUpdate) {
+        setPhase("daemon");
+        const installed = await invoke<string>("daemon_update_install");
+        setMessage(`Daemon updated to ${installed} and restarted.`);
+      }
+      if (app) {
+        setPhase("app");
+        // Restarts the app on success, so this only returns on failure.
+        await invoke("update_install");
+      }
+      setPhase("done");
+    } catch (e) {
+      setError(String(e));
+      setPhase("ready");
+    }
+  };
+
+  const anything = Boolean(app) || Boolean(daemon?.canUpdate);
+  const busy = phase === "checking" || phase === "daemon" || phase === "app";
+  const label =
+    phase === "checking"
+      ? "Checking…"
+      : phase === "daemon"
+        ? "Updating daemon…"
+        : phase === "app"
+          ? "Updating app…"
+          : anything
+            ? "Update"
+            : "Check for updates";
+  const daemonVersion = daemon?.installed
+    ? `${daemon.installed}${daemon.installedCommit ? ` (${daemon.installedCommit.slice(0, 8)})` : ""}`
+    : "not reachable";
+
+  return (
+    <section className="settings__section">
+      <h2 className="settings__heading">Updates</h2>
+      <dl className="settings__versions">
+        <dt>App</dt>
+        <dd>
+          {version ? `v${version}` : "…"}
+          {app ? ` → ${app.version} available` : phase !== "checking" && !error ? " · up to date" : ""}
+        </dd>
+        <dt>Daemon</dt>
+        <dd>
+          {daemon ? daemonVersion : "…"}
+          {daemon?.canUpdate && daemon.available ? ` → ${daemon.available} available` : ""}
+        </dd>
+      </dl>
+      {daemon?.note && <p className="settings__hint">{daemon.note}</p>}
+      <button className="btn btn--primary" onClick={anything ? update : check} disabled={busy}>
+        {label}
+      </button>
+      {message && <p className="settings__hint">{message}</p>}
+      {error && <p className="settings__error">{error}</p>}
+    </section>
+  );
+}
