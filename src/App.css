@@ -90,8 +90,26 @@ body,
   overflow: hidden;
 }
 
+/* An open tile fills the size React Flow gives its node (resizable). */
 .seat--open {
-  width: 640px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.seat--open .seat__clip {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.seat--open .seat-terminal {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 
 .react-flow__node.selected .seat {
@@ -724,4 +742,25 @@ body,
 .rig-power__dot--degraded,
 .rig-power__dot--attention_required {
   background: var(--attention);
+}
+
+/* Resizing an open tile: handles appear on hover. */
+
+.seat__resize-line {
+  border-color: transparent !important;
+}
+
+.seat__resize-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 3px;
+  background: var(--accent) !important;
+  border: 1px solid var(--bg) !important;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.react-flow__node:hover .seat__resize-handle,
+.react-flow__node.selected .seat__resize-handle {
+  opacity: 1;
 }

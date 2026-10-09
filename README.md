@@ -28,7 +28,7 @@ The full background, and the rig this was built against, are in the
 | Works | Not yet |
 |---|---|
 | One block per seat: health, model, session, activity, queue count | Adding a new pod |
-| Pan, zoom, minimap, draggable blocks | Launching or stopping whole rigs |
+| Pan, zoom, minimap, draggable blocks; resize a block with its terminal open, double-click its header to fit it on screen | Launching or stopping whole rigs |
 | **Attach** opens a live terminal in the block; typing goes to the seat, and stays there while you pan and zoom | Writing a seat's model change to `rig.yaml` |
 | **Add seat** to an existing pod; **edit** a seat's model, working directory, role or runtime; **remove** a seat | |
 | Layout saved per rig: positions, zoom/pan, open terminals | |

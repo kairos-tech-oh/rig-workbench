@@ -14,6 +14,7 @@ import {
   useUpdateNodeInternals,
   type Connection,
   type Edge,
+  type ReactFlowInstance,
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -34,7 +35,7 @@ import {
 import { EdgeLegend, edgeStyle } from "./EdgeLegend";
 import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
-import { SeatNode, type SeatFlowNode } from "./SeatNode";
+import { OPEN_SIZE, SeatNode, type SeatFlowNode } from "./SeatNode";
 import { onSpecProblem } from "./rigSpec";
 import { RigPower } from "./RigPower";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
@@ -315,6 +316,7 @@ export default function App() {
               terminalGeneration: 0,
               onToggleTerminal: () => {},
               onOpenSettings: () => {},
+              onResized: () => {},
             },
           };
         });
@@ -404,9 +406,24 @@ export default function App() {
     [refresh],
   );
 
+  const flow = useRef<ReactFlowInstance<SeatFlowNode> | null>(null);
+  /** Double-clicking a tile's header fits it on screen, at most at 100% so its text is readable. */
+  const fitTile = useCallback((event: React.MouseEvent, node: SeatFlowNode) => {
+    if (!(event.target instanceof Element) || !event.target.closest(".seat__header")) return;
+    if (event.target.closest("button")) return;
+    flow.current?.fitView({ nodes: [{ id: node.id }], maxZoom: 1, padding: 0.06, duration: 250 });
+  }, []);
+
+  const sizes = layout?.sizes;
+  const saveSize = useCallback(
+    (logicalId: string, size: { width: number; height: number }) =>
+      updateLayout((l) => ({ ...l, sizes: { ...l.sizes, [logicalId]: size } })),
+    [updateLayout],
+  );
+
   // ---- Rendering ----------------------------------------------------------------
 
-  const renderedNodes = useMemo(
+  const renderedNodes = useMemo<SeatFlowNode[]>(
     () =>
       nodes.map((node) => {
         const terminalOpen = openTerminals.has(node.id);
@@ -414,16 +431,20 @@ export default function App() {
         return {
           ...node,
           zIndex: terminalOpen ? 10 : 0,
+          // Open: the size the user gave it (live while resizing), else the default. Closed: compact.
+          width: terminalOpen ? (node.width ?? sizes?.[node.id]?.width ?? OPEN_SIZE.width) : undefined,
+          height: terminalOpen ? (node.height ?? sizes?.[node.id]?.height ?? OPEN_SIZE.height) : undefined,
           data: {
             ...node.data,
             terminalOpen,
             terminalGeneration,
             onToggleTerminal: toggleTerminal,
             onOpenSettings: openSettings,
+            onResized: saveSize,
           },
         };
       }),
-    [nodes, openTerminals, terminalGeneration, toggleTerminal, openSettings],
+    [nodes, openTerminals, terminalGeneration, toggleTerminal, openSettings, saveSize, sizes],
   );
 
   const boxes = useMemo(
@@ -612,6 +633,10 @@ export default function App() {
             restoreTerminalFocus();
           }}
           onMouseDownCapture={holdFocusOnCanvas}
+          onInit={(instance) => {
+            flow.current = instance;
+          }}
+          onNodeDoubleClick={fitTile}
           connectionMode={ConnectionMode.Loose}
           onConnect={onConnect}
           onReconnect={onReconnect}

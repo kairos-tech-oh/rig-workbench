@@ -17,6 +17,8 @@ export interface SavedLayout {
    * `edgeKey()`. Edges without an entry pick the sides facing each other.
    */
   edgeHandles?: Record<string, { sourceHandle: string; targetHandle: string }>;
+  /** Size of each tile with its terminal open, once resized. */
+  sizes?: Record<string, { width: number; height: number }>;
 }
 
 /** Identifies an edge by its seats and kind, which survive the daemon re-creating it. */

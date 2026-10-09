@@ -5,6 +5,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { trackTerminalFocus } from "./terminalFocus";
 
+/** How long a terminal's size must hold before tmux is told about it. */
+const PTY_RESIZE_SETTLE_MS = 150;
+
 type PtyEvent = { kind: "data"; b64: string } | { kind: "exit" };
 
 function decodeBase64(b64: string): Uint8Array {
@@ -60,14 +63,26 @@ export function SeatTerminal({ session, autoFocus = false }: { session: string; 
       invoke("pty_write", { id, data }).catch(() => {});
     });
 
+    // Refit at once so the text follows the tile while it is being resized, but
+    // tell tmux only once the size settles: each resize makes it and the seat's
+    // program redraw.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    let sentSize = `${term.cols}x${term.rows}`;
     const resize = new ResizeObserver(() => {
       fit.fit();
-      invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const size = `${term.cols}x${term.rows}`;
+        if (size === sentSize) return;
+        sentSize = size;
+        invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
+      }, PTY_RESIZE_SETTLE_MS);
     });
     resize.observe(container);
 
     return () => {
       disposed = true;
+      clearTimeout(resizeTimer);
       resize.disconnect();
       input.dispose();
       untrackFocus();

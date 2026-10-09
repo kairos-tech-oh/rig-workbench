@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { Seat } from "./api";
 import { SeatTerminal } from "./SeatTerminal";
 
@@ -10,7 +10,14 @@ export type SeatNodeData = {
   terminalGeneration: number;
   onToggleTerminal: (logicalId: string) => void;
   onOpenSettings: (logicalId: string) => void;
+  /** A tile with its terminal open was resized by the user. */
+  onResized: (logicalId: string, size: { width: number; height: number }) => void;
 };
+
+/** A tile with its terminal open: the default size, and the limits of resizing it. */
+export const OPEN_SIZE = { width: 640, height: 480 };
+const MIN_OPEN = { width: 360, height: 240 };
+const MAX_OPEN = { width: 2400, height: 1600 };
 
 export type SeatFlowNode = Node<SeatNodeData, "seat">;
 
@@ -43,7 +50,7 @@ function seatHealth(seat: Seat): Health {
 }
 
 export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
-  const { seat, terminalOpen, terminalGeneration, onToggleTerminal, onOpenSettings } = data;
+  const { seat, terminalOpen, terminalGeneration, onToggleTerminal, onOpenSettings, onResized } = data;
   // Set when this tile's Attach button opens the terminal, so typing works
   // straight away. Terminals restored from the saved layout don't take focus.
   const [focusOnAttach, setFocusOnAttach] = useState(false);
@@ -61,12 +68,25 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
 
   return (
     <div className={classes}>
+      {/* Only a tile with its terminal open has a size worth choosing; its handles show on hover. */}
+      <NodeResizer
+        isVisible={terminalOpen}
+        minWidth={MIN_OPEN.width}
+        minHeight={MIN_OPEN.height}
+        maxWidth={MAX_OPEN.width}
+        maxHeight={MAX_OPEN.height}
+        handleClassName="seat__resize-handle"
+        lineClassName="seat__resize-line"
+        onResizeEnd={(_, size) =>
+          onResized(seat.logicalId, { width: Math.round(size.width), height: Math.round(size.height) })
+        }
+      />
       {HANDLES.map((h) => (
         <Handle key={h.id} id={h.id} type="source" position={h.position} style={h.style} className="seat__handle" />
       ))}
       {/* Clips the content to the rounded corners; the handles sit outside it. */}
       <div className="seat__clip">
-        <header className="seat__header">
+        <header className="seat__header" title="Drag to move · double-click to fit it on screen">
           <span className={`seat__dot seat__dot--${health}`} title={health} />
           <span className="seat__name">{seat.logicalId}</span>
           <span className="seat__model">{seat.model ?? seat.runtime}</span>

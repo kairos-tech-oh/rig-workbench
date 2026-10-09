@@ -5,6 +5,10 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Tiles with an attached terminal can be resized by dragging their edges or
+  corners (the handles show on hover); the terminal refits and the seat's
+  session reflows to the new size, and each tile's size is remembered.
+  Double-click a tile's header to fit it on screen at a readable zoom.
 - A Start/Stop button next to the rig dropdown brings the selected rig up or
   down (`rig up --existing` / `rig down`), with a confirmation before stopping.
   Starting resumes each seat's conversation where it can and reports the
