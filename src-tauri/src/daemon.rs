@@ -64,6 +64,7 @@ const WRITE_ALLOWLIST: &[(&str, &str)] = &[
     ("POST", "/api/rigs/*/edges"),          // connect two seats
     ("DELETE", "/api/rigs/*/edges/*"),      // disconnect two seats
     ("POST", "/api/seat/set-model/*"),
+    ("POST", "/api/seat/set-permissions/*"), // a seat's launch mode, from its next launch
     ("POST", "/api/seat/launch/*"),
 ];
 
@@ -205,6 +206,7 @@ mod tests {
         assert!(check_write("POST", "/api/rigs/R1/edges").is_ok());
         assert!(check_write("DELETE", "/api/rigs/R1/edges/E1").is_ok());
         assert!(check_write("POST", "/api/seat/set-model/eng-gym%40workbench").is_ok());
+        assert!(check_write("POST", "/api/seat/set-permissions/eng-gym%40workbench").is_ok());
 
         assert!(check_write("DELETE", "/api/rigs/R1").is_err());
         assert!(check_write("POST", "/api/rigs/R1/up").is_err());

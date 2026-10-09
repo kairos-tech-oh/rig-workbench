@@ -153,6 +153,8 @@ export interface MemberConfig {
   profile: string;
   cwd: string;
   model: string;
+  /** rig.yaml `permission_policy` for the seat; absent follows the rig's. */
+  permissionPolicy?: string;
 }
 
 // Each topology write below also updates rig.yaml in the rig folder once the
@@ -175,6 +177,7 @@ export async function addSeat(rigId: string, pod: string, member: MemberConfig, 
         profile: member.profile,
         cwd: member.cwd,
         ...(member.model ? { model: member.model } : {}),
+        ...(member.permissionPolicy ? { permission_policy: member.permissionPolicy } : {}),
       },
       rigRoot,
     },
@@ -189,6 +192,7 @@ export async function addSeat(rigId: string, pod: string, member: MemberConfig, 
       model: member.model || undefined,
       profile: member.profile,
       cwd: member.cwd,
+      permission_policy: member.permissionPolicy,
     },
   });
 }
@@ -212,6 +216,32 @@ export function setSeatModel(session: string, model: string) {
     model,
     reason: REASON,
   });
+}
+
+/**
+ * Choose how the seat's agent is launched from its next launch on: `floor`,
+ * `auto`, `full_bypass`, or `inherit`. Running agents are not changed.
+ */
+export function setSeatPermissions(session: string, mode: string) {
+  // The daemon wants to know who asked; the app is not a seat, so it names itself.
+  return daemonWrite("POST", `/api/seat/set-permissions/${encodeURIComponent(session)}`, {
+    mode,
+    reason: REASON,
+    operator: "rig-workbench",
+  });
+}
+
+/** How the seat's agent is launched now, as the daemon reports it. */
+export interface SeatPermissions {
+  effectiveMode: string | null;
+  source: string | null;
+}
+
+export async function seatPermissions(session: string): Promise<SeatPermissions> {
+  const status = await daemonGet<{ permissions?: { effective?: SeatPermissions } }>(
+    `/api/seat/status/${encodeURIComponent(session)}`,
+  );
+  return status.permissions?.effective ?? { effectiveMode: null, source: null };
 }
 
 /** Stop the seat and launch it again with a fresh conversation. */

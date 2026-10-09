@@ -53,6 +53,25 @@ A block's gear button opens its inspector; **+ Add seat** opens the same form em
   guesses it (the working directory most seats share) and saves any change
   with the layout.
 
+### Launch modes
+
+A seat's settings choose how its agent is launched, using OpenRig's
+`permission_policy`:
+
+| Mode | rig.yaml | Claude is launched with |
+|---|---|---|
+| Standard (accept edits) | `builtin:standard` (or none) | `--permission-mode acceptEdits` |
+| Auto | `builtin:auto` | `--permission-mode auto` |
+| Skip all permission checks | `builtin:yolo` | `--dangerously-skip-permissions` |
+
+**Rig default** leaves the seat's own policy out, so it follows the rig-wide
+`permission_policy`, which can be Standard or Auto only: skipping permission
+checks is always a choice for one seat, confirmed in the panel and marked in
+red on its tile. Codex seats offer Standard and Skip (Codex has no auto mode;
+Skip runs it with full access). A change is recorded in rig.yaml and with the
+daemon (`rig seat set-permissions`), and takes effect at the seat's next
+launch; tick **Restart now** to apply it at once.
+
 ### Keeping `rig.yaml` in step
 
 Once the daemon accepts a change, the GUI makes the same change to `rig.yaml`

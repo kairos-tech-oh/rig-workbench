@@ -764,3 +764,60 @@ body,
 .react-flow__node.selected .seat__resize-handle {
   opacity: 1;
 }
+
+/* Launch modes */
+
+.seat__badge {
+  flex: none;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.seat__badge--danger {
+  border-color: var(--down);
+  background: color-mix(in srgb, var(--down) 22%, transparent);
+  color: #ffb3ad;
+  font-weight: 600;
+}
+
+.field select.launch-select--danger {
+  border-color: var(--down);
+  color: #ffb3ad;
+}
+
+.launch-danger {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--down);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+  font-size: 12px;
+}
+
+.launch-danger p {
+  margin: 0 0 6px;
+}
+
+.launch-danger .field--check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-weight: 600;
+}
+
+.launch-default {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.launch-default select {
+  flex: 1;
+  padding: 3px 6px;
+}

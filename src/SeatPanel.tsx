@@ -1,13 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   addSeat,
   relaunchSeatFresh,
   removeSeat,
+  seatPermissions,
   setSeatModel,
+  setSeatPermissions,
   splitLogicalId,
   type MemberConfig,
   type Seat,
+  type SeatPermissions,
 } from "./api";
+import {
+  LABEL,
+  POLICY,
+  effectiveMode,
+  hasLaunchMode,
+  liveSelection,
+  modeOf,
+  modesFor,
+  type LaunchMode,
+  type SeatLaunchMode,
+} from "./launchMode";
+import { updateRigSpec, type SpecPolicies } from "./rigSpec";
 
 import modelCatalog from "./models.json";
 
@@ -20,6 +35,14 @@ interface ModelOption {
 const MODELS: Record<string, ModelOption[]> = modelCatalog;
 const RUNTIMES = Object.keys(MODELS);
 const CUSTOM = "__custom__";
+
+/** Where the daemon's next-launch mode comes from, in words. */
+const SOURCE: Record<string, string> = {
+  explicit: "set for this seat",
+  member_spec: "this seat in rig.yaml",
+  rig_spec: "the rig's default",
+  system_default: "OpenRig's default",
+};
 const MEMBER_ID = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const modelsFor = (runtime: string): ModelOption[] => MODELS[runtime] ?? [];
@@ -75,6 +98,10 @@ interface Common {
   roles: RoleOption[];
   rigFolder: string;
   onRigFolderChange: (folder: string) => void;
+  /** Launch policies from rig.yaml; null while loading or when it can't be read. */
+  policies: SpecPolicies | null;
+  /** Change the rig-wide default launch mode (Standard or Auto, never Skip). */
+  onRigDefaultChange: (mode: LaunchMode) => Promise<string>;
   onClose: () => void;
   /** Called after a successful change, with a summary for the status line. */
   onChanged: (message: string) => void;
@@ -101,6 +128,26 @@ export function SeatPanel(props: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Launch mode: the seat's own policy in rig.yaml, or the rig's default when it has none.
+  const rigDefault: LaunchMode = modeOf(props.policies?.rig) ?? "standard";
+  const ownPolicy = seat ? props.policies?.members[seat.logicalId] : undefined;
+  // null: a policy this app doesn't set (a custom file, locked, open); it is left as it is.
+  const initialLaunch: SeatLaunchMode | null = ownPolicy === undefined ? "rig" : modeOf(ownPolicy);
+  const [launch, setLaunch] = useState<SeatLaunchMode | null>(initialLaunch);
+  const [skipConfirmed, setSkipConfirmed] = useState(false);
+  const [nextLaunch, setNextLaunch] = useState<SeatPermissions | null>(null);
+  const launchChange = !!seat && launch !== initialLaunch;
+  const choosingSkip = launch === "skip" && initialLaunch !== "skip";
+  const ownPolicyFor = (mode: SeatLaunchMode | null) => (mode === null || mode === "rig" ? undefined : POLICY[mode]);
+
+  useEffect(() => {
+    if (!seat || !hasLaunchMode(seat.runtime)) return;
+    seatPermissions(seat.canonicalSessionName).then(
+      (p) => setNextLaunch(p),
+      () => {},
+    );
+  }, [seat?.canonicalSessionName]);
+
   const structuralChange =
     !!seat && (cwd !== (seat.cwd ?? "") || runtime !== seat.runtime || agentRef !== (seat.agentRef ?? ""));
   const modelChange = !!seat && model !== (seat.model ?? "");
@@ -112,7 +159,19 @@ export function SeatPanel(props: Props) {
     profile: seat?.profile ?? "default",
     cwd: cwd.trim(),
     model: model.trim(),
+    permissionPolicy: hasLaunchMode(runtime) ? ownPolicyFor(launch) : undefined,
   });
+
+  /** Record the seat's launch mode: in rig.yaml, and with the daemon for its next launch. */
+  const applyLaunch = async (target: Seat) => {
+    if (launch === null) return;
+    await setSeatPermissions(target.canonicalSessionName, liveSelection(launch, rigDefault, runtime));
+    await updateRigSpec(props.rigFolder, {
+      op: "setMemberPolicy",
+      logicalId: target.logicalId,
+      policy: ownPolicyFor(launch) ?? null,
+    });
+  };
 
   const validationError = (): string | null => {
     if (!pod) return "Choose a pod.";
@@ -120,6 +179,7 @@ export function SeatPanel(props: Props) {
     if (!model.trim()) return "Choose a model.";
     if (!cwd.trim()) return "Working directory is required.";
     if (!agentRef) return "Choose a role.";
+    if (choosingSkip && !skipConfirmed) return "Tick the box to confirm skipping permission checks for this seat.";
     if (agentRef.startsWith("local:") && !props.rigFolder.trim()) {
       return "Rig folder is required to resolve this role.";
     }
@@ -164,17 +224,26 @@ export function SeatPanel(props: Props) {
           const reason = e instanceof Error ? e.message : String(e);
           throw new Error(`${seat.logicalId} was removed but could not be added back: ${reason}`);
         }
+        // Back to following the rig: the add above only writes a policy, never removes one.
+        if (launchChange && launch === "rig") {
+          await updateRigSpec(props.rigFolder, { op: "setMemberPolicy", logicalId: seat.logicalId, policy: null });
+        }
         return `Replaced ${seat.logicalId} with a fresh seat.`;
       });
       return;
     }
-    if (!modelChange && !restartNow) return props.onClose();
+    if (!modelChange && !launchChange && !restartNow) return props.onClose();
     if (!model.trim()) return setError("Choose a model.");
+    if (choosingSkip && !skipConfirmed) return setError(validationError());
     run(restartNow ? `Restarting ${seat.logicalId}…` : "Saving…", async () => {
       if (modelChange) await setSeatModel(seat.canonicalSessionName, model.trim());
-      if (restartNow) await relaunchSeatFresh(seat.canonicalSessionName);
-      if (restartNow) return `Restarted ${seat.logicalId} fresh${modelChange ? ` on ${model}` : ""}.`;
-      return `${seat.logicalId} will use ${model} from its next launch.`;
+      if (launchChange) await applyLaunch(seat);
+      const changes = [modelChange && `on ${model}`, launchChange && launch && `in ${describe(launch)}`].filter(Boolean);
+      if (restartNow) {
+        await relaunchSeatFresh(seat.canonicalSessionName);
+        return `Restarted ${seat.logicalId} fresh${changes.length ? ` ${changes.join(", ")}` : ""}.`;
+      }
+      return `${seat.logicalId} will launch ${changes.join(", ")} from its next launch.`;
     });
   };
 
@@ -187,6 +256,13 @@ export function SeatPanel(props: Props) {
       return `Removed ${seat.logicalId}.`;
     });
   };
+
+  /** "Auto", or "the rig default (Standard (accept edits))". */
+  const describe = (mode: SeatLaunchMode) =>
+    mode === "rig" ? `the rig default (${LABEL[effectiveMode("rig", rigDefault, runtime)]})` : LABEL[mode];
+
+  const changeRigDefault = (mode: LaunchMode) =>
+    run(`Setting the rig default to ${LABEL[mode]}…`, () => props.onRigDefaultChange(mode));
 
   const roleOptions = props.roles.some((r) => r.agentRef === agentRef) || !agentRef
     ? props.roles
@@ -232,6 +308,7 @@ export function SeatPanel(props: Props) {
             onChange={(e) => {
               const next = e.target.value;
               setRuntime(next);
+              if (launch !== null && launch !== "rig" && !modesFor(next).includes(launch)) setLaunch("standard");
               // A listed model belongs to its runtime; switch to the new runtime's first.
               if (isListed(runtime, model) || !model) setModel(modelsFor(next)[0]?.id ?? "");
             }}
@@ -266,6 +343,68 @@ export function SeatPanel(props: Props) {
           </select>
         </label>
 
+        {hasLaunchMode(runtime) && (
+          <div className="field">
+            <span>Launch mode</span>
+            <select
+              value={launch ?? "custom"}
+              onChange={(e) => {
+                setLaunch(e.target.value as SeatLaunchMode);
+                setSkipConfirmed(false);
+              }}
+              className={launch === "skip" ? "launch-select--danger" : undefined}
+            >
+              <option value="rig">Rig default: {LABEL[effectiveMode("rig", rigDefault, runtime)]}</option>
+              {modesFor(runtime).map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode === "skip" ? `⚠ ${LABEL.skip} (dangerous)` : LABEL[mode]}
+                </option>
+              ))}
+              {launch === null && (
+                <option value="custom" disabled>
+                  Custom policy: {ownPolicy} (left as it is)
+                </option>
+              )}
+            </select>
+            {launch === "skip" && (
+              <div className="launch-danger">
+                <p>
+                  This seat's agent will run any command and change any file without asking
+                  {runtime === "codex" ? ", with full filesystem and network access" : ""}. Only for a seat
+                  you trust with that, in a working directory you can afford to lose.
+                </p>
+                {choosingSkip && (
+                  <label className="field--check">
+                    <input type="checkbox" checked={skipConfirmed} onChange={(e) => setSkipConfirmed(e.target.checked)} />
+                    <span>I understand: {memberId || "this seat"} skips all permission checks.</span>
+                  </label>
+                )}
+              </div>
+            )}
+            <div className="launch-default">
+              <span>Rig default for all seats</span>
+              <select
+                value={rigDefault}
+                disabled={!!busy || !props.policies}
+                onChange={(e) => changeRigDefault(e.target.value as LaunchMode)}
+                title="Seats set to 'Rig default' launch this way. Skipping permission checks is never a default."
+              >
+                <option value="standard">{LABEL.standard}</option>
+                <option value="auto">{LABEL.auto}</option>
+              </select>
+            </div>
+            {seat && nextLaunch?.effectiveMode && (
+              <p className="panel__note">
+                The daemon will next launch this seat with <code>{nextLaunch.effectiveMode}</code>
+                {nextLaunch.source ? ` (${SOURCE[nextLaunch.source] ?? nextLaunch.source})` : ""}.
+              </p>
+            )}
+            {!props.policies && (
+              <p className="panel__note">rig.yaml could not be read, so the current setting is not shown.</p>
+            )}
+          </div>
+        )}
+
         {(props.mode === "add" || structuralChange) && (
           <label className="field">
             <span>Rig folder (for roles)</span>
@@ -285,8 +424,11 @@ export function SeatPanel(props: Props) {
           </label>
         )}
 
-        {seat && modelChange && !restartNow && !structuralChange && (
-          <p className="panel__note">The new model takes effect the next time this seat launches.</p>
+        {seat && (modelChange || launchChange) && !restartNow && !structuralChange && (
+          <p className="panel__note">
+            The new {[modelChange && "model", launchChange && "launch mode"].filter(Boolean).join(" and ")} takes
+            effect the next time this seat launches.
+          </p>
         )}
         {structuralChange && (
           <p className="panel__note panel__note--warn">

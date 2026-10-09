@@ -5,6 +5,12 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Each seat has a launch mode in its settings: Standard (accept edits), Auto,
+  or Skip all permission checks, or the rig's default. It is written to
+  rig.yaml as the seat's `permission_policy` and applies from the seat's next
+  launch (or now, with Restart now). Skipping permission checks must be
+  confirmed per seat and is marked in red on the tile; the rig-wide default
+  offers only Standard and Auto, so it is never on by default.
 - A connection drawn between two seats of the same pod is now written to that
   pod's own `edges:` list in rig.yaml. Before, it went to the top-level list,
   which OpenRig rejects when the rig is next brought up from the spec.

@@ -30,13 +30,15 @@ import {
   type Rig,
   type RigEdge,
   type RigSummary,
+  setSeatPermissions,
   type Seat,
 } from "./api";
 import { EdgeLegend, edgeStyle } from "./EdgeLegend";
 import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { OPEN_SIZE, SeatNode, type SeatFlowNode } from "./SeatNode";
-import { onSpecProblem } from "./rigSpec";
+import { LABEL, POLICY, effectiveMode, hasLaunchMode, liveSelection, modeOf, type LaunchMode } from "./launchMode";
+import { onSpecProblem, readSpecPolicies, updateRigSpec, type SpecPolicies } from "./rigSpec";
 import { RigPower } from "./RigPower";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
 import { openSettingsWindow, useAppliedSettings } from "./settings";
@@ -250,6 +252,8 @@ export default function App() {
 
   const [daemonDown, setDaemonDown] = useState(false);
   const [summaries, setSummaries] = useState<RigSummary[]>([]);
+  /** Launch policies from rig.yaml (see loadPolicies). */
+  const [policies, setPolicies] = useState<SpecPolicies | null>(null);
   // Bumped when a rig comes back up, so open terminals attach to the new sessions.
   const [terminalGeneration, setTerminalGeneration] = useState(0);
   const loadRigs = useCallback(async () => {
@@ -406,6 +410,17 @@ export default function App() {
     [refresh],
   );
 
+  /** The mode a seat launches in per rig.yaml, for its tile's badge; null when not known. */
+  const launchModeOf = useCallback(
+    (seat: Seat): LaunchMode | null => {
+      if (!policies || !hasLaunchMode(seat.runtime)) return null;
+      const own = policies.members[seat.logicalId];
+      if (own !== undefined) return modeOf(own);
+      return effectiveMode("rig", modeOf(policies.rig) ?? "standard", seat.runtime);
+    },
+    [policies],
+  );
+
   const flow = useRef<ReactFlowInstance<SeatFlowNode> | null>(null);
   /** Double-clicking a tile's header fits it on screen, at most at 100% so its text is readable. */
   const fitTile = useCallback((event: React.MouseEvent, node: SeatFlowNode) => {
@@ -441,10 +456,11 @@ export default function App() {
             onToggleTerminal: toggleTerminal,
             onOpenSettings: openSettings,
             onResized: saveSize,
+            launchMode: launchModeOf(node.data.seat),
           },
         };
       }),
-    [nodes, openTerminals, terminalGeneration, toggleTerminal, openSettings, saveSize, sizes],
+    [nodes, openTerminals, terminalGeneration, toggleTerminal, openSettings, saveSize, sizes, launchModeOf],
   );
 
   const boxes = useMemo(
@@ -546,13 +562,41 @@ export default function App() {
     [updateLayout],
   );
 
+  // Launch modes live in rig.yaml; read them when the rig folder is known and after each change.
+  const loadPolicies = useCallback(() => {
+    if (!rigFolder) return setPolicies(null);
+    readSpecPolicies(rigFolder).then(setPolicies, () => setPolicies(null));
+  }, [rigFolder]);
+  useEffect(loadPolicies, [loadPolicies]);
+
+  /** The rig-wide default: rig.yaml, and each running seat that follows it, from its next launch. */
+  const applyRigDefault = async (mode: LaunchMode): Promise<string> => {
+    await updateRigSpec(rigFolder, { op: "setRigPolicy", policy: mode === "standard" ? null : POLICY[mode] });
+    const following = seats.filter((s) => hasLaunchMode(s.runtime) && !policies?.members[s.logicalId]);
+    const failed: string[] = [];
+    for (const s of following) {
+      try {
+        await setSeatPermissions(s.canonicalSessionName, liveSelection("rig", mode, s.runtime));
+      } catch (e) {
+        failed.push(`${s.logicalId}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    if (failed.length) throw new Error(`The rig default is set, but these seats were not updated: ${failed.join("; ")}`);
+    return `Rig default is now ${LABEL[mode]}. ${following.length} seat(s) following it launch that way from their next launch.`;
+  };
+
   const selectedSeat = seats.find((s) => s.logicalId === selected) ?? null;
   const panelProps = {
     rigId: rigId ?? "",
     roles,
     rigFolder,
     onRigFolderChange: setRigFolder,
-    onChanged,
+    onChanged: (message: string) => {
+      onChanged(message);
+      loadPolicies();
+    },
+    policies,
+    onRigDefaultChange: applyRigDefault,
   };
 
   return (
@@ -703,7 +747,7 @@ export default function App() {
         )}
         {!adding && selectedSeat && (
           <SeatPanel
-            key={selectedSeat.logicalId}
+            key={`${selectedSeat.logicalId}:${policies ? "spec" : "no-spec"}`}
             mode="edit"
             seat={selectedSeat}
             onClose={() => setSelected(null)}

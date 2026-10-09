@@ -16,6 +16,7 @@ export interface SpecMember {
   model?: string;
   profile: string;
   cwd: string;
+  permission_policy?: string;
 }
 
 export type SpecChange =
@@ -24,9 +25,13 @@ export type SpecChange =
   /** Adds the member, or updates it in place (keeping its label and comments) if it exists. */
   | { op: "upsertMember"; pod: string; member: SpecMember }
   /** Removes the member and every edge that mentions it, as the daemon does. */
-  | { op: "removeMember"; logicalId: string };
+  | { op: "removeMember"; logicalId: string }
+  /** A seat's `permission_policy`; null removes it, so the seat follows the rig's. */
+  | { op: "setMemberPolicy"; logicalId: string; policy: string | null }
+  /** The rig-wide `permission_policy`; null removes it (OpenRig's standard floor). */
+  | { op: "setRigPolicy"; policy: string | null };
 
-const MEMBER_KEYS: (keyof SpecMember)[] = ["agent_ref", "runtime", "model", "profile", "cwd"];
+const MEMBER_KEYS: (keyof SpecMember)[] = ["agent_ref", "runtime", "model", "profile", "cwd", "permission_policy"];
 
 function splitId(logicalId: string): [string, string] {
   const dot = logicalId.indexOf(".");
@@ -91,6 +96,29 @@ function setScalar(doc: Document, map: YAMLMap, key: string, value: string, sibl
   const style = sibling?.get(key, true);
   if (isScalar(style) && isScalar(node)) node.type = style.type;
   map.set(key, node);
+}
+
+/** Sets or removes `permission_policy` on a member or the whole rig; returns whether it changed. */
+function setPolicy(doc: Document, owner: YAMLMap | Document, policy: string | null): boolean {
+  const current = owner.get("permission_policy");
+  if (policy === null) {
+    if (current === undefined) return false;
+    owner.delete("permission_policy");
+    return true;
+  }
+  if (current === policy) return false;
+  const existing = owner.get("permission_policy", true);
+  if (isScalar(existing)) {
+    existing.value = policy;
+  } else if (owner === doc && isMap(doc.contents)) {
+    // Rig-wide: near the top, after the rig's summary or name, not after its edges.
+    const items = doc.contents.items;
+    const after = ["summary", "name"].map((k) => items.findIndex((p) => isScalar(p.key) && p.key.value === k)).find((i) => i >= 0);
+    items.splice((after ?? -1) + 1, 0, doc.createPair("permission_policy", policy));
+  } else {
+    owner.set("permission_policy", doc.createNode(policy));
+  }
+  return true;
 }
 
 /**
@@ -177,6 +205,17 @@ export function applySpecChange(text: string, change: SpecChange, folder: string
       changed = removeWhere(doc.get("edges"), mentions) > 0 || changed;
       break;
     }
+    case "setMemberPolicy": {
+      const [podId, memberId] = splitId(change.logicalId);
+      const members = findPod(doc, podId)?.get("members");
+      const entry = isSeq(members) ? members.items.filter(isMap).find((m) => str(m, "id") === memberId) : undefined;
+      if (!entry) throw new Error(`rig.yaml has no seat "${change.logicalId}"`);
+      changed = setPolicy(doc, entry, change.policy);
+      break;
+    }
+    case "setRigPolicy":
+      changed = setPolicy(doc, doc, change.policy);
+      break;
   }
 
   if (!changed) return { text, changed };
@@ -210,4 +249,31 @@ export async function updateRigSpec(folder: string, change: SpecChange): Promise
     const message = `Changed in the daemon, but rig.yaml was not updated: ${e instanceof Error ? e.message : e}`;
     for (const l of listeners) l(message);
   }
+}
+
+/** The launch policies rig.yaml declares: the rig-wide one, and each seat's own. */
+export interface SpecPolicies {
+  rig: string | null;
+  /** Keyed by logical id; seats without their own policy are absent. */
+  members: Record<string, string>;
+}
+
+/** Read the permission policies from `<folder>/rig.yaml`. */
+export async function readSpecPolicies(folder: string): Promise<SpecPolicies> {
+  const text = await invoke<string>("rig_spec_read", { folder });
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) throw new Error(`rig.yaml does not parse: ${doc.errors[0].message}`);
+  const members: Record<string, string> = {};
+  for (const pod of pods(doc)) {
+    const podId = str(pod, "id");
+    const seq = pod.get("members");
+    if (!podId || !isSeq(seq)) continue;
+    for (const member of seq.items.filter(isMap)) {
+      const id = str(member, "id");
+      const policy = str(member, "permission_policy");
+      if (id && policy) members[`${podId}.${id}`] = policy;
+    }
+  }
+  const rig = doc.get("permission_policy");
+  return { rig: typeof rig === "string" ? rig : null, members };
 }

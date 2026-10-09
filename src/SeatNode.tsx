@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { Seat } from "./api";
+import type { LaunchMode } from "./launchMode";
 import { SeatTerminal } from "./SeatTerminal";
 
 export type SeatNodeData = {
@@ -12,6 +13,8 @@ export type SeatNodeData = {
   onOpenSettings: (logicalId: string) => void;
   /** A tile with its terminal open was resized by the user. */
   onResized: (logicalId: string, size: { width: number; height: number }) => void;
+  /** How the seat's agent launches, per rig.yaml; null when unknown. */
+  launchMode?: LaunchMode | null;
 };
 
 /** A tile with its terminal open: the default size, and the limits of resizing it. */
@@ -50,7 +53,7 @@ function seatHealth(seat: Seat): Health {
 }
 
 export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
-  const { seat, terminalOpen, terminalGeneration, onToggleTerminal, onOpenSettings, onResized } = data;
+  const { seat, terminalOpen, terminalGeneration, onToggleTerminal, onOpenSettings, onResized, launchMode } = data;
   // Set when this tile's Attach button opens the terminal, so typing works
   // straight away. Terminals restored from the saved layout don't take focus.
   const [focusOnAttach, setFocusOnAttach] = useState(false);
@@ -90,6 +93,16 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
           <span className={`seat__dot seat__dot--${health}`} title={health} />
           <span className="seat__name">{seat.logicalId}</span>
           <span className="seat__model">{seat.model ?? seat.runtime}</span>
+          {launchMode === "skip" && (
+            <span className="seat__badge seat__badge--danger" title="Launches with all permission checks skipped">
+              ⚠ no permission checks
+            </span>
+          )}
+          {launchMode === "auto" && (
+            <span className="seat__badge" title="Launches in auto mode">
+              auto
+            </span>
+          )}
           <button
             className="seat__toggle nodrag"
             onClick={(event) => {
