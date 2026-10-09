@@ -20,7 +20,7 @@ fn spec_path(folder: &str) -> Result<PathBuf, String> {
 }
 
 #[cfg(windows)]
-fn native_path(linux: &str) -> PathBuf {
+pub(crate) fn native_path(linux: &str) -> PathBuf {
     let parts: Vec<&str> = linux.split('/').filter(|p| !p.is_empty()).collect();
     if parts.len() >= 2 && parts[0] == "mnt" && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic())
     {
@@ -35,7 +35,7 @@ fn native_path(linux: &str) -> PathBuf {
 }
 
 #[cfg(not(windows))]
-fn native_path(linux: &str) -> PathBuf {
+pub(crate) fn native_path(linux: &str) -> PathBuf {
     PathBuf::from(linux)
 }
 

@@ -5,6 +5,12 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Under the legend, an AI usage box shows how much of the Claude (and Codex,
+  when installed) subscription limits is used: the 5-hour session and weekly
+  windows with their reset times, and a graph of the last day. It reads the
+  seats' own login (inside WSL on Windows), plus the Windows login when that is
+  a different account. Nothing but the numbers leaves the app's backend; the
+  graph covers only the time the app was open.
 - Each seat has a launch mode in its settings: Standard (accept edits), Auto,
   or Skip all permission checks, or the rig's default. It is written to
   rig.yaml as the seat's `permission_policy` and applies from the seat's next

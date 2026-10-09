@@ -72,6 +72,20 @@ Skip runs it with full access). A change is recorded in rig.yaml and with the
 daemon (`rig seat set-permissions`), and takes effect at the seat's next
 launch; tick **Restart now** to apply it at once.
 
+### AI usage
+
+The box under the legend shows each logged-in subscription's rate limits:
+Claude's 5-hour session and weekly windows (and any model-scoped ones), and
+Codex's, when Codex is installed where the seats run. It reads the login the
+seats use (inside WSL on Windows) and asks Anthropic's usage endpoint, as
+netwatch does, at most once a minute (every 5 minutes on its own; ↻ checks
+now). The access token is only ever sent to that endpoint; it is not shown,
+logged, stored or refreshed. A Windows-side Claude login is shown as a second
+row only when it is signed in to a different account.
+
+The graph covers the last day, from readings the app took while it was open:
+time the app was closed is a gap.
+
 ### Keeping `rig.yaml` in step
 
 Once the daemon accepts a change, the GUI makes the same change to `rig.yaml`

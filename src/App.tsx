@@ -6,6 +6,7 @@ import {
   Controls,
   MarkerType,
   MiniMap,
+  Panel,
   ReactFlow,
   useNodesInitialized,
   useNodesState,
@@ -34,6 +35,7 @@ import {
   type Seat,
 } from "./api";
 import { EdgeLegend, edgeStyle } from "./EdgeLegend";
+import { UsageOverlay } from "./UsageOverlay";
 import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { OPEN_SIZE, SeatNode, type SeatFlowNode } from "./SeatNode";
@@ -702,7 +704,10 @@ export default function App() {
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <MiniMap pannable zoomable />
           <Controls />
-          <EdgeLegend kinds={edges.flatMap((e) => (e.data?.kind ? [e.data.kind as string] : []))} />
+          <Panel position="top-right" className="corner">
+            <EdgeLegend kinds={edges.flatMap((e) => (e.data?.kind ? [e.data.kind as string] : []))} />
+            <UsageOverlay />
+          </Panel>
           <RemeasureHandles />
           <InitialView rigId={rigId} viewport={layout === null ? undefined : layout.viewport ?? null} />
         </ReactFlow>

@@ -6,6 +6,7 @@ mod rig_cli;
 mod rig_spec;
 mod settings;
 mod updates;
+mod usage;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,6 +23,7 @@ pub fn run() {
         .manage(pty::PtyRegistry::default())
         .manage(daemon::EventsSubscription::default())
         .manage(daemon_update::PendingDaemon::default())
+        .manage(usage::UsageState::default())
         .invoke_handler(tauri::generate_handler![
             daemon::daemon_get,
             daemon::daemon_write,
@@ -46,6 +48,7 @@ pub fn run() {
             updates::update_check,
             updates::update_install,
             updates::app_version,
+            usage::usage_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

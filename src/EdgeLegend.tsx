@@ -1,4 +1,3 @@
-import { Panel } from "@xyflow/react";
 import type { CSSProperties } from "react";
 import { EDGE_KINDS } from "./api";
 
@@ -7,7 +6,7 @@ export function edgeStyle(kind: string): CSSProperties {
   return kind === "can_observe" ? { strokeDasharray: "6 4" } : { strokeWidth: 1.5 };
 }
 
-/** Top-right key for the edge kinds the canvas is currently drawing. */
+/** Key for the edge kinds the canvas is currently drawing; shown in the top-right corner. */
 export function EdgeLegend({ kinds }: { kinds: string[] }) {
   if (kinds.length === 0) return null;
   const order = (kind: string) => {
@@ -16,7 +15,7 @@ export function EdgeLegend({ kinds }: { kinds: string[] }) {
   };
   const sorted = [...new Set(kinds)].sort((a, b) => order(a) - order(b) || a.localeCompare(b));
   return (
-    <Panel position="top-right" className="legend" aria-label="Edge legend">
+    <div className="legend" aria-label="Edge legend">
       {sorted.map((kind) => (
         <div key={kind} className="legend__row">
           {/* Same marker and classes as a real edge, so the canvas CSS styles it too. */}
@@ -51,6 +50,6 @@ export function EdgeLegend({ kinds }: { kinds: string[] }) {
           <span className="legend__text">{EDGE_KINDS.find((k) => k.kind === kind)?.reads ?? kind}</span>
         </div>
       ))}
-    </Panel>
+    </div>
   );
 }

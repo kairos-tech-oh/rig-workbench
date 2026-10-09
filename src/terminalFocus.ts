@@ -29,8 +29,8 @@ export function trackTerminalFocus(term: Terminal): () => void {
 /** Things on the canvas that take focus on purpose: fields, other terminals, tile buttons. */
 function takesFocus(target: Element): boolean {
   if (target.closest(".seat-terminal, input, textarea, select, [contenteditable]")) return true;
-  // The zoom buttons are canvas chrome, like the pane.
-  return !!target.closest("button, a") && !target.closest(".react-flow__controls");
+  // The zoom buttons and the usage overlay's are canvas chrome, like the pane.
+  return !!target.closest("button, a") && !target.closest(".react-flow__controls, .usage");
 }
 
 /**
