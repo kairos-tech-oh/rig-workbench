@@ -43,6 +43,7 @@ import { useCommunicationFlashes, type Flash } from "./useCommunicationFlashes";
 const POLL_MS = 5000;
 const SAVE_DELAY_MS = 400;
 const STATUS_MS = 6000;
+const RIG_RETRY_MS = 4000;
 const COLUMN_WIDTH = 720;
 const ROW_HEIGHT = 180;
 
@@ -243,15 +244,29 @@ export default function App() {
 
   // ---- Daemon data -------------------------------------------------------------
 
-  useEffect(() => {
-    listRigs()
-      .then((found) => {
-        setRigs(found);
-        setRigId((current) => current ?? found[0]?.id ?? null);
-        setError(found.length === 0 ? "The daemon is running but has no rigs." : null);
-      })
-      .catch((e) => setError(String(e)));
+  const [daemonDown, setDaemonDown] = useState(false);
+  const loadRigs = useCallback(async () => {
+    try {
+      const found = await listRigs();
+      setRigs(found);
+      setRigId((current) => current ?? found[0]?.id ?? null);
+      setDaemonDown(false);
+      setError(found.length === 0 ? "The daemon is running but has no rigs." : null);
+      return found.length > 0;
+    } catch (e) {
+      setDaemonDown(String(e).includes("daemon unreachable"));
+      setError(String(e));
+      return false;
+    }
   }, []);
+
+  // Until rigs are found, keep looking: the daemon may be started later, from Settings.
+  useEffect(() => {
+    if (rigs.length > 0) return;
+    loadRigs();
+    const timer = setInterval(loadRigs, RIG_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [rigs.length, loadRigs]);
 
   const layoutLoaded = layout !== null;
 
@@ -526,6 +541,11 @@ export default function App() {
         </span>
         {status && <span className="toolbar__status">{status}</span>}
         {error && <span className="toolbar__error">{error}</span>}
+        {daemonDown && (
+          <button className="btn toolbar__start-daemon" onClick={openSettingsWindow}>
+            Start daemon…
+          </button>
+        )}
         <VersionButton updates={updates} />
         <button className="toolbar__settings" onClick={openSettingsWindow} title="Settings (Ctrl+,)">
           Settings

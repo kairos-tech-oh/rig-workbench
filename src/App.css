@@ -653,3 +653,37 @@ body,
 .settings__error {
   white-space: pre-wrap;
 }
+
+/* Daemon start */
+
+.settings {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.settings__daemon {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+
+.settings__daemon--up {
+  color: var(--ready);
+}
+
+.settings__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.settings__output {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  font: 11px/1.4 "Cascadia Mono", Consolas, monospace;
+  color: var(--muted);
+}
+
+.toolbar__start-daemon {
+  flex-shrink: 0;
+}

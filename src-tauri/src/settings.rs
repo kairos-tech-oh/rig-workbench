@@ -47,7 +47,7 @@ pub async fn settings_open(app: AppHandle) -> Result<(), String> {
     }
     WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html".into()))
         .title("Rig Workbench Settings")
-        .inner_size(440.0, 330.0)
+        .inner_size(460.0, 560.0)
         .resizable(false)
         .build()
         .map(|_| ())

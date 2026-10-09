@@ -5,6 +5,11 @@ when it offers that update.
 
 ## [Unreleased]
 
+- Settings can start the OpenRig daemon (inside WSL on Windows) and shows
+  whether it is running; the kernel is started too only if you ask. When the
+  app can't reach the daemon, the toolbar offers to start it, and the app picks
+  up the rigs as soon as it answers.
+
 ## [0.2.0] - 2026-10-08
 
 - Settings has an Updates section showing the app and OpenRig daemon versions,

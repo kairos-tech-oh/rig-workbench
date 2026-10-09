@@ -2,6 +2,7 @@ mod daemon;
 mod daemon_update;
 mod layout;
 mod pty;
+mod rig_cli;
 mod rig_spec;
 mod settings;
 mod updates;
@@ -33,6 +34,8 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
+            rig_cli::daemon_health,
+            rig_cli::daemon_start,
             rig_spec::rig_spec_read,
             rig_spec::rig_spec_write,
             settings::settings_load,
