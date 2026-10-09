@@ -5,6 +5,9 @@ when it offers that update.
 
 ## [Unreleased]
 
+- A connection drawn between two seats of the same pod is now written to that
+  pod's own `edges:` list in rig.yaml. Before, it went to the top-level list,
+  which OpenRig rejects when the rig is next brought up from the spec.
 - Tiles with an attached terminal can be resized by dragging their edges or
   corners (the handles show on hover); the terminal refits and the seat's
   session reflows to the new size, and each tile's size is remembered.

@@ -59,7 +59,8 @@ Once the daemon accepts a change, the GUI makes the same change to `rig.yaml`
 in the rig folder: a new seat is added to its pod (a replaced seat is updated
 in place, keeping its label), a removed seat goes with every edge that
 mentions it, and connections are added to or removed from the top-level
-`edges:` list (or the pod's own list, if that is where one is declared).
+`edges:` list, or the pod's own `edges:` list (by member id) when both seats
+are in the same pod, which is where OpenRig requires those.
 Only the touched entries change; comments, quoting and layout are kept.
 
 If the file can't be updated (no `rig.yaml` in the rig folder, or it changed

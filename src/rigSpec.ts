@@ -123,7 +123,10 @@ export function applySpecChange(text: string, change: SpecChange, folder: string
         (isSeq(top) && top.items.some(isEdge(from, to, kind))) ||
         (local && isSeq(local[0].get("edges")) && (local[0].get("edges") as YAMLSeq).items.some(isEdge(local[1], local[2], kind)));
       if (!declared) {
-        blockSeq(doc, doc, "edges").add(doc.createNode({ kind, from, to }));
+        // OpenRig rejects a top-level edge between two seats of one pod; those
+        // belong in the pod's own list, by member id.
+        if (local) blockSeq(doc, local[0], "edges").add(doc.createNode({ kind, from: local[1], to: local[2] }));
+        else blockSeq(doc, doc, "edges").add(doc.createNode({ kind, from, to }));
         changed = true;
       }
       break;
