@@ -5,6 +5,12 @@ when it offers that update.
 
 ## [Unreleased]
 
+- A Start/Stop button next to the rig dropdown brings the selected rig up or
+  down (`rig up --existing` / `rig down`), with a confirmation before stopping.
+  Starting resumes each seat's conversation where it can and reports the
+  outcome; a seat that can't resume is offered a fresh start. Open terminals
+  reattach when the rig comes back. The rig list also picks up rigs started
+  elsewhere.
 - Settings can start the OpenRig daemon (inside WSL on Windows) and shows
   whether it is running; the kernel is started too only if you ask. When the
   app can't reach the daemon, the toolbar offers to start it, and the app picks

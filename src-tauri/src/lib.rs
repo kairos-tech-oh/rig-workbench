@@ -36,6 +36,8 @@ pub fn run() {
             pty::pty_close,
             rig_cli::daemon_health,
             rig_cli::daemon_start,
+            rig_cli::rig_down,
+            rig_cli::rig_up,
             rig_spec::rig_spec_read,
             rig_spec::rig_spec_write,
             settings::settings_load,

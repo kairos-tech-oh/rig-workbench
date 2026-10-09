@@ -6,6 +6,8 @@ import { SeatTerminal } from "./SeatTerminal";
 export type SeatNodeData = {
   seat: Seat;
   terminalOpen: boolean;
+  /** Changes when the seat's sessions were recreated (its rig came back up), to reattach. */
+  terminalGeneration: number;
   onToggleTerminal: (logicalId: string) => void;
   onOpenSettings: (logicalId: string) => void;
 };
@@ -41,7 +43,7 @@ function seatHealth(seat: Seat): Health {
 }
 
 export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
-  const { seat, terminalOpen, onToggleTerminal, onOpenSettings } = data;
+  const { seat, terminalOpen, terminalGeneration, onToggleTerminal, onOpenSettings } = data;
   // Set when this tile's Attach button opens the terminal, so typing works
   // straight away. Terminals restored from the saved layout don't take focus.
   const [focusOnAttach, setFocusOnAttach] = useState(false);
@@ -104,7 +106,13 @@ export function SeatNode({ data, selected }: NodeProps<SeatFlowNode>) {
           </span>
         </div>
         {seat.cwd && <div className="seat__cwd">{seat.cwd}</div>}
-        {terminalOpen && <SeatTerminal session={seat.canonicalSessionName} autoFocus={focusOnAttach} />}
+        {terminalOpen && (
+          <SeatTerminal
+            key={terminalGeneration}
+            session={seat.canonicalSessionName}
+            autoFocus={focusOnAttach}
+          />
+        )}
       </div>
     </div>
   );

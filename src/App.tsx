@@ -21,12 +21,14 @@ import "./App.css";
 import {
   addEdge,
   listEdges,
+  listRigSummaries,
   listRigs,
   listSeats,
   onDaemonEvent,
   removeEdge,
   type Rig,
   type RigEdge,
+  type RigSummary,
   type Seat,
 } from "./api";
 import { EdgeLegend, edgeStyle } from "./EdgeLegend";
@@ -34,6 +36,7 @@ import { ConnectPanel, EdgePanel } from "./EdgePanels";
 import { edgeKey, emptyLayout, loadLayout, saveLayout, type SavedLayout } from "./layout";
 import { SeatNode, type SeatFlowNode } from "./SeatNode";
 import { onSpecProblem } from "./rigSpec";
+import { RigPower } from "./RigPower";
 import { SeatPanel, type RoleOption } from "./SeatPanel";
 import { openSettingsWindow, useAppliedSettings } from "./settings";
 import { holdFocusOnCanvas, restoreTerminalFocus } from "./terminalFocus";
@@ -245,6 +248,9 @@ export default function App() {
   // ---- Daemon data -------------------------------------------------------------
 
   const [daemonDown, setDaemonDown] = useState(false);
+  const [summaries, setSummaries] = useState<RigSummary[]>([]);
+  // Bumped when a rig comes back up, so open terminals attach to the new sessions.
+  const [terminalGeneration, setTerminalGeneration] = useState(0);
   const loadRigs = useCallback(async () => {
     try {
       const found = await listRigs();
@@ -273,7 +279,20 @@ export default function App() {
   const refresh = useCallback(async () => {
     if (!rigId) return;
     try {
-      const [nextSeats, nextEdges] = await Promise.all([listSeats(rigId), listEdges(rigId)]);
+      const [nextSeats, nextEdges, nextSummaries] = await Promise.all([
+        listSeats(rigId),
+        listEdges(rigId),
+        listRigSummaries().catch(() => null),
+      ]);
+      if (nextSummaries) {
+        setSummaries(nextSummaries);
+        // Rigs added or removed elsewhere (rig up, rig down --delete) show up in the dropdown.
+        setRigs((current) =>
+          current.map((r) => r.id).join() === nextSummaries.map((r) => r.id).join()
+            ? current
+            : nextSummaries.map(({ id, name }) => ({ id, name })),
+        );
+      }
       const saved = layoutRef.current?.positions ?? {};
       const defaults = defaultPositions(nextSeats);
       setSeats(nextSeats);
@@ -290,7 +309,13 @@ export default function App() {
             type: "seat" as const,
             position: prev?.position ?? saved[seat.logicalId] ?? defaults.get(seat.logicalId)!,
             dragHandle: ".seat__header",
-            data: { seat, terminalOpen: false, onToggleTerminal: () => {}, onOpenSettings: () => {} },
+            data: {
+              seat,
+              terminalOpen: false,
+              terminalGeneration: 0,
+              onToggleTerminal: () => {},
+              onOpenSettings: () => {},
+            },
           };
         });
       });
@@ -389,10 +414,16 @@ export default function App() {
         return {
           ...node,
           zIndex: terminalOpen ? 10 : 0,
-          data: { ...node.data, terminalOpen, onToggleTerminal: toggleTerminal, onOpenSettings: openSettings },
+          data: {
+            ...node.data,
+            terminalOpen,
+            terminalGeneration,
+            onToggleTerminal: toggleTerminal,
+            onOpenSettings: openSettings,
+          },
         };
       }),
-    [nodes, openTerminals, toggleTerminal, openSettings],
+    [nodes, openTerminals, terminalGeneration, toggleTerminal, openSettings],
   );
 
   const boxes = useMemo(
@@ -526,6 +557,18 @@ export default function App() {
             ))}
           </select>
         )}
+        <RigPower
+          rig={summaries.find((summary) => summary.id === rigId) ?? null}
+          working={seats.filter((seat) => seat.activityState?.display === "working").length}
+          attached={openTerminals.size}
+          sessionFor={(logicalId) => seats.find((seat) => seat.logicalId === logicalId)?.canonicalSessionName ?? null}
+          onChanged={(message, cameUp) => {
+            if (message) setStatus(message);
+            if (cameUp) setTerminalGeneration((g) => g + 1);
+            refresh();
+          }}
+          onError={setError}
+        />
         <button
           className="btn btn--primary toolbar__add"
           disabled={!rigId || seats.length === 0}

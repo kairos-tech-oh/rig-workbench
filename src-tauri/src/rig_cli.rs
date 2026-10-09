@@ -25,6 +25,8 @@ rm -f "$log"
 exit $rc"#;
 
 const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(240);
+const RIG_UP_TIMEOUT: Duration = Duration::from_secs(600);
+const RIG_DOWN_TIMEOUT: Duration = Duration::from_secs(180);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
 const DEFAULT_PORT: u16 = 7433;
 /// Lines of output kept in an error, enough to show what went wrong.
@@ -154,9 +156,78 @@ pub async fn daemon_start(with_kernel: bool) -> Result<String, String> {
     run(&args, DAEMON_START_TIMEOUT).await
 }
 
+/// Rig names come from the daemon's own list; still, only plain names reach the CLI.
+fn check_rig_name(name: &str) -> Result<(), String> {
+    let ok = !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("invalid rig name '{name}'"))
+    }
+}
+
+/// The JSON object a `--json` command printed, wherever it is in the output.
+fn json_result(output: &str) -> Option<serde_json::Value> {
+    let start = output.find('{')?;
+    serde_json::from_str(output[start..].trim()).ok()
+}
+
+/// Run a `--json` rig command. Its JSON answer is returned even when the exit
+/// code says otherwise: `rig up` exits nonzero for a partial restore, which
+/// the caller reports seat by seat rather than as a failure.
+async fn run_json(args: &[&str], timeout: Duration) -> Result<serde_json::Value, String> {
+    let shown = format!("rig {}", args.join(" "));
+    let output = tokio::time::timeout(timeout, command(args).output())
+        .await
+        .map_err(|_| format!("`{shown}` did not finish within {}s", timeout.as_secs()))?
+        .map_err(|e| format!("could not run `{shown}`: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Some(answer) = json_result(&stdout) {
+        return Ok(answer);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let said = tail(&stdout, &stderr);
+    Err(if said.is_empty() {
+        format!("`{shown}` failed")
+    } else {
+        format!("`{shown}` failed:\n{said}")
+    })
+}
+
+/// Bring a stopped rig back: `rig up <name> --existing` restores it from its
+/// latest snapshot, resuming each seat's conversation where the harness allows.
+/// Returns OpenRig's result, including each seat's outcome.
+#[tauri::command]
+pub async fn rig_up(name: String) -> Result<serde_json::Value, String> {
+    check_rig_name(&name)?;
+    run_json(&["up", &name, "--existing", "--json"], RIG_UP_TIMEOUT).await
+}
+
+/// Stop every seat of a rig: `rig down <name>`. OpenRig snapshots it first, and
+/// the rig record is kept so `rig_up` can bring it back. The daemon keeps running.
+#[tauri::command]
+pub async fn rig_down(name: String) -> Result<serde_json::Value, String> {
+    check_rig_name(&name)?;
+    run_json(&["down", &name, "--json"], RIG_DOWN_TIMEOUT).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_plain_rig_names() {
+        assert!(check_rig_name("workbench").is_ok());
+        assert!(check_rig_name("rig-wb_test.2").is_ok());
+        assert!(check_rig_name("").is_err());
+        assert!(check_rig_name("--delete").is_err());
+        assert!(check_rig_name("a b").is_err());
+        assert!(check_rig_name("a;rm").is_err());
+    }
 
     #[test]
     fn error_tail_drops_shell_noise() {
@@ -164,5 +235,12 @@ mod tests {
         assert_eq!(tail("one\n\ntwo\nexit\n", stderr), "one\ntwo");
         let long: String = (0..20).map(|i| format!("line {i}\n")).collect();
         assert!(tail(&long, "").starts_with("line 8"));
+    }
+
+    #[test]
+    fn finds_the_json_answer_after_shell_noise() {
+        let out = "bash: no job control in this shell\n{\"status\":\"restored\",\"nodes\":[]}\n";
+        assert_eq!(json_result(out).unwrap()["status"], "restored");
+        assert!(json_result("Daemon not running").is_none());
     }
 }

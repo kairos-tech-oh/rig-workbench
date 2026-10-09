@@ -687,3 +687,41 @@ body,
 .toolbar__start-daemon {
   flex-shrink: 0;
 }
+
+/* Rig start/stop */
+
+.rig-power {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rig-power--busy {
+  color: var(--attention);
+}
+
+.rig-power--confirm {
+  flex-shrink: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--down);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--down) 12%, var(--panel));
+}
+
+.rig-power__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.rig-power__dot--running {
+  background: var(--ready);
+}
+
+.rig-power__dot--degraded,
+.rig-power__dot--attention_required {
+  background: var(--attention);
+}

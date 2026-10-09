@@ -52,6 +52,48 @@ export function daemonGet<T>(path: string): Promise<T> {
 
 export const listRigs = () => daemonGet<Rig[]>("/api/rigs");
 
+/** A rig's state, from `/api/rigs/summary`. */
+export interface RigSummary {
+  id: string;
+  name: string;
+  nodeCount: number;
+  /** running | degraded | attention_required | recoverable | stopped */
+  lifecycleState: string;
+}
+
+export const listRigSummaries = () => daemonGet<RigSummary[]>("/api/rigs/summary");
+
+/** One seat's outcome in `rig up --json`, e.g. resumed, fresh-primed or awaiting-decision. */
+export interface SeatUpResult {
+  logicalId: string;
+  status: string;
+  error?: string;
+}
+
+/** What `rig up --json` reports. Fields are optional: a refusal has a different shape. */
+export interface RigUpResult {
+  status?: string;
+  rigResult?: string;
+  nodes?: SeatUpResult[];
+  error?: string;
+  message?: string;
+}
+
+/** What `rig down --json` reports. */
+export interface RigDownResult {
+  sessionsKilled?: number;
+  alreadyStopped?: boolean;
+  errors?: string[];
+  error?: string;
+  message?: string;
+}
+
+/** Bring a stopped rig back, resuming its seats (`rig up <name> --existing`). */
+export const rigUp = (name: string) => invoke<RigUpResult>("rig_up", { name });
+
+/** Stop every seat of a rig (`rig down <name>`); the rig can be brought back. */
+export const rigDown = (name: string) => invoke<RigDownResult>("rig_down", { name });
+
 export const listSeats = (rigId: string) =>
   daemonGet<Seat[]>(`/api/rigs/${encodeURIComponent(rigId)}/nodes`);
 
